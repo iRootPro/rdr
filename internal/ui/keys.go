@@ -19,6 +19,7 @@ type keyMap struct {
 	RefreshAll key.Binding
 	OpenURL     key.Binding
 	FullArticle key.Binding
+	Settings    key.Binding
 	Help        key.Binding
 }
 
@@ -40,6 +41,7 @@ func defaultKeys() keyMap {
 		RefreshAll: key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh all")),
 		OpenURL:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")),
 		FullArticle: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full article")),
+		Settings:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 	}
 }
@@ -53,6 +55,6 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown},
 		{k.Left, k.Right, k.Tab, k.Enter, k.Back},
 		{k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle},
-		{k.Help, k.Quit},
+		{k.Help, k.Settings, k.Quit},
 	}
 }
