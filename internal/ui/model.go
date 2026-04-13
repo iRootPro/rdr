@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -42,6 +43,9 @@ type Model struct {
 	reader    viewport.Model
 	readerArt *db.Article
 
+	help     help.Model
+	showHelp bool
+
 	status string
 	err    error
 }
@@ -50,6 +54,13 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(colorAccent)
+
+	h := help.New()
+	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(colorAccent)
+	h.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colorMuted)
+	h.Styles.FullKey = lipgloss.NewStyle().Foreground(colorAccent)
+	h.Styles.FullDesc = lipgloss.NewStyle().Foreground(colorMuted)
+
 	return Model{
 		db:       database,
 		fetcher:  fetcher,
@@ -58,6 +69,7 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 		spin:     s,
 		fetching: true,
 		reader:   viewport.New(0, 0),
+		help:     h,
 	}
 }
 
@@ -86,6 +98,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
+		case key.Matches(msg, m.keys.Help):
+			m.showHelp = !m.showHelp
+			m.help.ShowAll = m.showHelp
+			return m, nil
+		case key.Matches(msg, m.keys.OpenURL):
+			var url string
+			switch m.focus {
+			case focusArticles:
+				if len(m.articles) > 0 {
+					url = m.articles[m.selArt].URL
+				}
+			case focusReader:
+				if m.readerArt != nil {
+					url = m.readerArt.URL
+				}
+			}
+			if url != "" {
+				if err := openInBrowser(url); err != nil {
+					m.err = err
+				}
+			}
+			return m, nil
 		case key.Matches(msg, m.keys.Tab):
 			if m.focus == focusFeeds {
 				m.focus = focusArticles
@@ -335,14 +369,17 @@ func (m Model) View() string {
 		return "rdr: terminal too small"
 	}
 
+	helpView := m.helpView()
+	helpH := lipgloss.Height(helpView)
+
 	if m.focus == focusReader && m.readerArt != nil {
 		statusText := "rdr · reader"
 		if m.err != nil {
 			statusText += "  " + errStyle.Render("! "+m.err.Error())
 		}
 		status := statusBar.Width(m.width).Render(statusText)
-		body := paneActive.Width(m.width - 2).Height(m.height - 2).Render(m.reader.View())
-		return lipgloss.JoinVertical(lipgloss.Top, body, status)
+		body := paneActive.Width(m.width - 2).Height(m.height - 2 - helpH).Render(m.reader.View())
+		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
 	leftW := m.width/3 - 2
@@ -353,7 +390,7 @@ func (m Model) View() string {
 	if rightW < 10 {
 		rightW = 10
 	}
-	paneH := m.height - 2
+	paneH := m.height - 2 - helpH
 
 	left := renderFeedList(m.feeds, m.selFeed, m.focus == focusFeeds, leftW, paneH)
 	right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH)
@@ -369,7 +406,14 @@ func (m Model) View() string {
 	}
 	status := statusBar.Width(m.width).Render(statusText)
 
-	return lipgloss.JoinVertical(lipgloss.Top, row, status)
+	return lipgloss.JoinVertical(lipgloss.Top, row, status, helpView)
+}
+
+func (m Model) helpView() string {
+	if m.showHelp {
+		return m.help.View(m.keys)
+	}
+	return m.help.ShortHelpView(m.keys.ShortHelp())
 }
 
 func loadFeedsCmd(d *db.DB) tea.Cmd {
