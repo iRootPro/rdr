@@ -22,7 +22,7 @@ func TestUpsertArticle_InsertThenUpdatePreservesReadAt(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	a := newArticle(f.ID, "https://a.example/1", "v1", now)
-	if err := d.UpsertArticle(a); err != nil {
+	if _, err := d.UpsertArticle(a); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestUpsertArticle_InsertThenUpdatePreservesReadAt(t *testing.T) {
 	}
 
 	a.Title = "v2"
-	if err := d.UpsertArticle(a); err != nil {
+	if _, err := d.UpsertArticle(a); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
@@ -60,9 +60,9 @@ func TestListArticles_OrdersByPublishedDesc(t *testing.T) {
 	f, _ := d.UpsertFeed("A", "https://a.example/rss")
 	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
 
-	_ = d.UpsertArticle(newArticle(f.ID, "https://a.example/1", "older", base))
-	_ = d.UpsertArticle(newArticle(f.ID, "https://a.example/2", "newer", base.Add(time.Hour)))
-	_ = d.UpsertArticle(newArticle(f.ID, "https://a.example/3", "middle", base.Add(30*time.Minute)))
+	_, _ = d.UpsertArticle(newArticle(f.ID, "https://a.example/1", "older", base))
+	_, _ = d.UpsertArticle(newArticle(f.ID, "https://a.example/2", "newer", base.Add(time.Hour)))
+	_, _ = d.UpsertArticle(newArticle(f.ID, "https://a.example/3", "middle", base.Add(30*time.Minute)))
 
 	list, err := d.ListArticles(f.ID, 10)
 	if err != nil {
@@ -84,11 +84,11 @@ func TestTrimArticles_RemovesOldestReadBeyondLimit(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		a := newArticle(f.ID, urlN(i), "read", base.Add(time.Duration(i)*time.Minute))
-		_ = d.UpsertArticle(a)
+		_, _ = d.UpsertArticle(a)
 	}
 	for i := 3; i < 5; i++ {
 		a := newArticle(f.ID, urlN(i), "unread", base.Add(time.Duration(i)*time.Minute))
-		_ = d.UpsertArticle(a)
+		_, _ = d.UpsertArticle(a)
 	}
 	list, _ := d.ListArticles(f.ID, 10)
 	for _, a := range list {
@@ -118,4 +118,26 @@ func TestTrimArticles_RemovesOldestReadBeyondLimit(t *testing.T) {
 
 func urlN(i int) string {
 	return "https://a.example/" + string(rune('0'+i))
+}
+
+func TestUpsertArticle_ReturnsInsertedFlag(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	a := newArticle(f.ID, "https://a.example/1", "v1", time.Now().UTC())
+
+	inserted, err := d.UpsertArticle(a)
+	if err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	if !inserted {
+		t.Fatalf("first upsert: expected inserted=true")
+	}
+
+	inserted, err = d.UpsertArticle(a)
+	if err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	if inserted {
+		t.Fatalf("second upsert: expected inserted=false")
+	}
 }

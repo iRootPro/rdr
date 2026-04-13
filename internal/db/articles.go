@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -20,8 +21,18 @@ type Article struct {
 	CreatedAt   time.Time
 }
 
-func (d *DB) UpsertArticle(a Article) error {
-	_, err := d.sql.Exec(`
+func (d *DB) UpsertArticle(a Article) (bool, error) {
+	var existed int
+	err := d.sql.QueryRow(
+		`SELECT 1 FROM articles WHERE feed_id = ? AND url = ?`,
+		a.FeedID, a.URL,
+	).Scan(&existed)
+	inserted := errors.Is(err, sql.ErrNoRows)
+	if err != nil && !inserted {
+		return false, fmt.Errorf("check article: %w", err)
+	}
+
+	_, err = d.sql.Exec(`
 		INSERT INTO articles
 			(feed_id, title, url, description, content, published_at)
 		VALUES (?, ?, ?, ?, ?, ?)
@@ -32,9 +43,9 @@ func (d *DB) UpsertArticle(a Article) error {
 			published_at = excluded.published_at
 	`, a.FeedID, a.Title, a.URL, a.Description, a.Content, a.PublishedAt)
 	if err != nil {
-		return fmt.Errorf("upsert article: %w", err)
+		return false, fmt.Errorf("upsert article: %w", err)
 	}
-	return nil
+	return inserted, nil
 }
 
 func (d *DB) ListArticles(feedID int64, limit int) ([]Article, error) {
