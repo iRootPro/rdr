@@ -1,13 +1,17 @@
 package feed
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+	readability "github.com/go-shiori/go-readability"
 	"github.com/mmcdole/gofeed"
 	"golang.org/x/sync/errgroup"
 
@@ -71,6 +75,34 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 		return FetchResult{}, fmt.Errorf("trim: %w", err)
 	}
 	return result, nil
+}
+
+func (f *Fetcher) FetchFull(ctx context.Context, articleURL string) (string, error) {
+	body, err := f.get(ctx, articleURL)
+	if err != nil {
+		return "", err
+	}
+	defer body.Close()
+
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		return "", fmt.Errorf("read body: %w", err)
+	}
+
+	parsed, err := url.Parse(articleURL)
+	if err != nil {
+		return "", fmt.Errorf("parse url: %w", err)
+	}
+	article, err := readability.FromReader(bytes.NewReader(raw), parsed)
+	if err != nil {
+		return "", fmt.Errorf("readability: %w", err)
+	}
+
+	md, err := htmltomarkdown.ConvertString(article.Content)
+	if err != nil {
+		return "", fmt.Errorf("html to markdown: %w", err)
+	}
+	return md, nil
 }
 
 func (f *Fetcher) maxArticlesPerFeed() int {

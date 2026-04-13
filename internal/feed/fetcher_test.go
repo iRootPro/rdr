@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,5 +295,32 @@ func TestFetchOne_TrimsReadArticlesToSettingCap(t *testing.T) {
 	}
 	if read != 1 {
 		t.Fatalf("read: got %d, want 1 (oldest 2 of 3 reads trimmed)", read)
+	}
+}
+
+func TestFetchFull_ExtractsAndConvertsToMarkdown(t *testing.T) {
+	d := openTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		body, _ := os.ReadFile(filepath.Join("testdata", "article.html"))
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	f := New(d)
+	md, err := f.FetchFull(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("FetchFull: %v", err)
+	}
+	if md == "" {
+		t.Fatal("empty markdown")
+	}
+	for _, want := range []string{"first paragraph", "second paragraph", "List item one"} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("markdown missing %q:\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "Site header noise") || strings.Contains(md, "Footer noise") {
+		t.Fatalf("readability did not strip chrome:\n%s", md)
 	}
 }
