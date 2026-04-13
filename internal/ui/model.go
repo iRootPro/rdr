@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -18,6 +19,7 @@ type focus int
 const (
 	focusFeeds focus = iota
 	focusArticles
+	focusReader
 )
 
 type Model struct {
@@ -37,6 +39,9 @@ type Model struct {
 	spin     spinner.Model
 	fetching bool
 
+	reader    viewport.Model
+	readerArt *db.Article
+
 	status string
 	err    error
 }
@@ -52,6 +57,7 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 		status:   "fetching…",
 		spin:     s,
 		fetching: true,
+		reader:   viewport.New(0, 0),
 	}
 }
 
@@ -68,6 +74,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.reader.Width = m.width - 4
+		m.reader.Height = m.height - 2
+		if m.readerArt != nil {
+			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4))
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -82,26 +94,65 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.Down):
+			if m.focus == focusReader {
+				var cmd tea.Cmd
+				m.reader, cmd = m.reader.Update(msg)
+				return m, cmd
+			}
 			return m.moveDown()
 		case key.Matches(msg, m.keys.Up):
+			if m.focus == focusReader {
+				var cmd tea.Cmd
+				m.reader, cmd = m.reader.Update(msg)
+				return m, cmd
+			}
 			return m.moveUp()
 		case key.Matches(msg, m.keys.Right), key.Matches(msg, m.keys.Enter):
-			if m.focus == focusFeeds && len(m.articles) > 0 {
-				m.focus = focusArticles
+			switch m.focus {
+			case focusFeeds:
+				if len(m.articles) > 0 {
+					m.focus = focusArticles
+				}
+			case focusArticles:
+				if len(m.articles) > 0 {
+					return m.openReader()
+				}
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.Left), key.Matches(msg, m.keys.Back):
-			if m.focus == focusArticles {
+			switch m.focus {
+			case focusArticles:
 				m.focus = focusFeeds
+			case focusReader:
+				m.focus = focusArticles
+				m.readerArt = nil
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.Top):
+			if m.focus == focusReader {
+				m.reader.GotoTop()
+				return m, nil
+			}
 			return m.moveTo(0)
 		case key.Matches(msg, m.keys.Bottom):
+			if m.focus == focusReader {
+				m.reader.GotoBottom()
+				return m, nil
+			}
 			return m.moveToEnd()
 		case key.Matches(msg, m.keys.PageDown):
+			if m.focus == focusReader {
+				var cmd tea.Cmd
+				m.reader, cmd = m.reader.Update(msg)
+				return m, cmd
+			}
 			return m.moveByPage(+1)
 		case key.Matches(msg, m.keys.PageUp):
+			if m.focus == focusReader {
+				var cmd tea.Cmd
+				m.reader, cmd = m.reader.Update(msg)
+				return m, cmd
+			}
 			return m.moveByPage(-1)
 		case key.Matches(msg, m.keys.RefreshAll), key.Matches(msg, m.keys.RefreshOne):
 			if m.fetching {
@@ -165,6 +216,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, nil
 	}
+	return m, nil
+}
+
+func (m Model) openReader() (tea.Model, tea.Cmd) {
+	a := m.articles[m.selArt]
+	m.readerArt = &a
+	m.focus = focusReader
+	m.reader.Width = m.width - 4
+	m.reader.Height = m.height - 2
+	feedName := readerFeedName(m.feeds, a.FeedID)
+	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4))
+	m.reader.GotoTop()
 	return m, nil
 }
 
@@ -255,6 +318,16 @@ func (m Model) View() string {
 	}
 	if m.width < 40 || m.height < 10 {
 		return "rdr: terminal too small"
+	}
+
+	if m.focus == focusReader && m.readerArt != nil {
+		statusText := "rdr · reader"
+		if m.err != nil {
+			statusText += "  " + errStyle.Render("! "+m.err.Error())
+		}
+		status := statusBar.Width(m.width).Render(statusText)
+		body := paneActive.Width(m.width - 2).Height(m.height - 2).Render(m.reader.View())
+		return lipgloss.JoinVertical(lipgloss.Top, body, status)
 	}
 
 	leftW := m.width/3 - 2
