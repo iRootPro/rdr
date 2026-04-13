@@ -9,7 +9,7 @@ import (
 	"github.com/iRootPro/rdr/internal/db"
 )
 
-func renderFeedList(feeds []db.Feed, selected int, active bool, width, height int) string {
+func renderFeedList(feeds []db.Feed, errors map[int64]error, selected int, active bool, width, height int) string {
 	var b strings.Builder
 	b.WriteString(paneTitle.Render("Feeds"))
 	b.WriteString("\n")
@@ -19,7 +19,7 @@ func renderFeedList(feeds []db.Feed, selected int, active bool, width, height in
 		return framePane(b.String(), active, width, height)
 	}
 
-	nameW := width - 8
+	nameW := width - 10
 	if nameW < 1 {
 		nameW = 1
 	}
@@ -36,7 +36,12 @@ func renderFeedList(feeds []db.Feed, selected int, active bool, width, height in
 			}
 		}
 
-		name := nameStyle.Render(prefix + truncate(f.Name, nameW))
+		errMark := ""
+		if _, ok := errors[f.ID]; ok {
+			errMark = errStyle.Render("● ")
+		}
+
+		name := nameStyle.Render(prefix + errMark + truncate(f.Name, nameW))
 		counter := ""
 		if f.UnreadCount > 0 {
 			counter = counterStyle.Render(fmt.Sprintf("%d", f.UnreadCount))
