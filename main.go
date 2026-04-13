@@ -1,21 +1,20 @@
 package main
 
 import (
-	"context"
-	"flag"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/iRootPro/rdr/internal/config"
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
+	"github.com/iRootPro/rdr/internal/ui"
 )
 
 func main() {
-	doFetch := flag.Bool("fetch", false, "fetch all feeds before printing")
-	flag.Parse()
-
 	home, err := config.ResolveHome()
 	if err != nil {
 		log.Fatalf("resolve home: %v", err)
@@ -35,28 +34,10 @@ func main() {
 		log.Fatalf("sync feeds: %v", err)
 	}
 
-	if *doFetch {
-		fetcher := feed.New(database)
-		results, err := fetcher.FetchAll(context.Background())
-		if err != nil {
-			log.Fatalf("fetch: %v", err)
-		}
-		for _, r := range results {
-			if r.Err != nil {
-				fmt.Printf("  ! %s: %v\n", r.Feed.Name, r.Err)
-				continue
-			}
-			fmt.Printf("  ✓ %s: added=%d updated=%d\n", r.Feed.Name, r.Added, r.Updated)
-		}
-	}
-
-	feeds, err := database.ListFeeds()
-	if err != nil {
-		log.Fatalf("list feeds: %v", err)
-	}
-	fmt.Printf("rdr: home=%s, %d feed(s)\n", home, len(feeds))
-	for _, f := range feeds {
-		fmt.Printf("  [%d] %s — %s (unread: %d)\n",
-			f.Position, f.Name, f.URL, f.UnreadCount)
+	fetcher := feed.New(database)
+	program := tea.NewProgram(ui.New(database, fetcher), tea.WithAltScreen())
+	if _, err := program.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, "run:", err)
+		os.Exit(1)
 	}
 }
