@@ -7,7 +7,7 @@ import (
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
-	_ "image/png"
+	"image/png"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -80,6 +80,27 @@ func imageID(url string) uint32 {
 	return binary.BigEndian.Uint32(sum[:4])
 }
 
+// toPNG decodes any format Go's image package can read and re-encodes
+// it as PNG. Kitty's f=100 requires PNG; JPEG/GIF/etc need conversion.
+// Returns the input untouched if it's already PNG.
+func toPNG(data []byte) ([]byte, error) {
+	// PNG magic: 89 50 4E 47 0D 0A 1A 0A.
+	if len(data) >= 8 &&
+		data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G' &&
+		data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A {
+		return data, nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func imageCells(data []byte, termWidth int) (cols, rows int) {
 	maxCols := termWidth - 4
 	if maxCols < 10 {
@@ -127,9 +148,16 @@ func renderWithKittyImages(md string, width int, imageCache string) (string, str
 				content.WriteString("\n")
 				continue
 			}
+			pngData, err := toPNG(data)
+			if err != nil {
+				content.WriteString("\n")
+				content.WriteString(readerHint.Render("[📷 " + spec.alt + " — unsupported format]"))
+				content.WriteString("\n")
+				continue
+			}
 			id := imageID(spec.url)
 			cols, rows := imageCells(data, width)
-			transmits.WriteString(kitty.Transmit(id, data))
+			transmits.WriteString(kitty.Transmit(id, pngData))
 			transmits.WriteString(kitty.Placement(id, cols, rows))
 			content.WriteString("\n")
 			content.WriteString(kitty.PlaceholderBlock(id, cols, rows))
