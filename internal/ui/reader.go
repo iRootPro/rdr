@@ -38,7 +38,11 @@ var (
 			Italic(true)
 )
 
-var reImageRef = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+var (
+	// Image-inside-link: [![alt](img-url)](link-url) → keep inner image.
+	reNestedImageLink = regexp.MustCompile(`\[(!\[[^\]]*\]\([^)]+\))\]\([^)]+\)`)
+	reImageRef        = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+)
 
 type imageRef struct {
 	alt string
@@ -46,9 +50,11 @@ type imageRef struct {
 }
 
 // extractImages returns the markdown split into text chunks around image
-// refs, plus the image refs themselves in document order.
-// len(chunks) == len(images) + 1; chunks[i] precedes images[i].
+// refs, plus the image refs themselves in document order. Handles the
+// common html-to-markdown output of `[![alt](img)](link)` by stripping
+// the outer link wrapper first. len(chunks) == len(images) + 1.
 func extractImages(md string) (chunks []string, images []imageRef) {
+	md = reNestedImageLink.ReplaceAllString(md, "$1")
 	last := 0
 	for _, m := range reImageRef.FindAllStringSubmatchIndex(md, -1) {
 		chunks = append(chunks, md[last:m[0]])
@@ -94,16 +100,21 @@ func imageCells(data []byte, termWidth int) (cols, rows int) {
 	return cols, rows
 }
 
-func renderWithKittyImages(md string, width int, imageCache string) string {
+// renderWithKittyImages returns (content, transmits).
+// content goes into the viewport (placeholder blocks + text).
+// transmits is a raw blob of Kitty transmit escape sequences that must
+// be emitted outside any lipgloss/viewport processing so the APC stays
+// intact — lipgloss strips or mangles APC terminators.
+func renderWithKittyImages(md string, width int, imageCache string) (string, string) {
 	chunks, images := extractImages(md)
 
-	var out strings.Builder
+	var content, transmits strings.Builder
 	for i, chunk := range chunks {
 		if chunk != "" {
 			if rendered, err := renderMarkdown(chunk, width); err == nil {
-				out.WriteString(rendered)
+				content.WriteString(rendered)
 			} else {
-				out.WriteString(chunk)
+				content.WriteString(chunk)
 			}
 		}
 		if i < len(images) {
@@ -111,24 +122,24 @@ func renderWithKittyImages(md string, width int, imageCache string) string {
 			path := filepath.Join(imageCache, feed.ImageFileName(spec.url))
 			data, err := os.ReadFile(path)
 			if err != nil {
-				out.WriteString("\n")
-				out.WriteString(readerHint.Render("[📷 " + spec.alt + "]"))
-				out.WriteString("\n")
+				content.WriteString("\n")
+				content.WriteString(readerHint.Render("[📷 " + spec.alt + "]"))
+				content.WriteString("\n")
 				continue
 			}
 			id := imageID(spec.url)
 			cols, rows := imageCells(data, width)
-			out.WriteString(kitty.Transmit(id, data))
-			out.WriteString(kitty.Placement(id, cols, rows))
-			out.WriteString("\n")
-			out.WriteString(kitty.PlaceholderBlock(id, cols, rows))
-			out.WriteString("\n")
+			transmits.WriteString(kitty.Transmit(id, data))
+			transmits.WriteString(kitty.Placement(id, cols, rows))
+			content.WriteString("\n")
+			content.WriteString(kitty.PlaceholderBlock(id, cols, rows))
+			content.WriteString("\n")
 		}
 	}
-	return out.String()
+	return content.String(), transmits.String()
 }
 
-func buildReaderContent(a db.Article, feedName string, width int, kittyOn bool, imageCache string) string {
+func buildReaderContent(a db.Article, feedName string, width int, kittyOn bool, imageCache string) (string, string) {
 	var b strings.Builder
 
 	b.WriteString(readerTitle.Render(a.Title))
@@ -150,9 +161,12 @@ func buildReaderContent(a db.Article, feedName string, width int, kittyOn bool, 
 	b.WriteString(strings.Repeat("─", width))
 	b.WriteString("\n\n")
 
+	transmits := ""
 	if a.CachedBody != "" {
 		if kittyOn && imageCache != "" {
-			b.WriteString(renderWithKittyImages(a.CachedBody, width, imageCache))
+			body, tx := renderWithKittyImages(a.CachedBody, width, imageCache)
+			b.WriteString(body)
+			transmits = tx
 		} else if rendered, err := renderMarkdown(a.CachedBody, width); err == nil {
 			b.WriteString(rendered)
 		} else {
@@ -170,7 +184,7 @@ func buildReaderContent(a db.Article, feedName string, width int, kittyOn bool, 
 		b.WriteString("\n\n")
 		b.WriteString(readerHint.Render("[f] load full article"))
 	}
-	return b.String()
+	return b.String(), transmits
 }
 
 func renderMarkdown(md string, width int) (string, error) {
