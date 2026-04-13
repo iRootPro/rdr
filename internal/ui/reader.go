@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/rdr/internal/db"
@@ -48,18 +49,43 @@ func buildReaderContent(a db.Article, feedName string, width int) string {
 	b.WriteString(strings.Repeat("─", width))
 	b.WriteString("\n\n")
 
-	body := stripHTML(a.Content)
-	if body == "" {
-		body = stripHTML(a.Description)
+	if a.CachedBody != "" {
+		if rendered, err := renderMarkdown(a.CachedBody, width); err == nil {
+			b.WriteString(rendered)
+		} else {
+			b.WriteString(readerBody.Render(wrap(stripHTML(a.CachedBody), width)))
+		}
+	} else {
+		body := stripHTML(a.Content)
+		if body == "" {
+			body = stripHTML(a.Description)
+		}
+		if body == "" {
+			body = "(no content)"
+		}
+		b.WriteString(readerBody.Render(wrap(body, width)))
+		b.WriteString("\n\n")
+		b.WriteString(readerHint.Render("[f] load full article"))
 	}
-	if body == "" {
-		body = "(no content)"
-	}
-	b.WriteString(readerBody.Render(wrap(body, width)))
-	b.WriteString("\n\n")
-
-	b.WriteString(readerHint.Render("[f] load full article (Phase 2)"))
 	return b.String()
+}
+
+func renderMarkdown(md string, width int) (string, error) {
+	if width < 20 {
+		width = 20
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return "", err
+	}
+	out, err := r.Render(md)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(out, "\n"), nil
 }
 
 var (

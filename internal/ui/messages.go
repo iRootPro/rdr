@@ -22,6 +22,11 @@ type articleMarkedMsg struct {
 	articleID int64
 }
 
+type fullArticleLoadedMsg struct {
+	articleID int64
+	markdown  string
+}
+
 type errMsg struct {
 	err error
 }

@@ -17,8 +17,9 @@ type keyMap struct {
 	Back       key.Binding
 	RefreshOne key.Binding
 	RefreshAll key.Binding
-	OpenURL    key.Binding
-	Help       key.Binding
+	OpenURL     key.Binding
+	FullArticle key.Binding
+	Help        key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -37,8 +38,9 @@ func defaultKeys() keyMap {
 		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		RefreshOne: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh current")),
 		RefreshAll: key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh all")),
-		OpenURL:    key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")),
-		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		OpenURL:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")),
+		FullArticle: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full article")),
+		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 	}
 }
 
@@ -50,7 +52,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown},
 		{k.Left, k.Right, k.Tab, k.Enter, k.Back},
-		{k.RefreshOne, k.RefreshAll, k.OpenURL},
+		{k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle},
 		{k.Help, k.Quit},
 	}
 }

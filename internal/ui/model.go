@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -104,6 +105,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = !m.showHelp
 			m.help.ShowAll = m.showHelp
+			return m, nil
+		case key.Matches(msg, m.keys.FullArticle):
+			if m.focus == focusReader && m.readerArt != nil && m.readerArt.URL != "" && !m.fetching {
+				m.fetching = true
+				m.status = "loading full…"
+				return m, tea.Batch(
+					fetchFullCmd(m.fetcher, m.db, m.readerArt.ID, m.readerArt.URL),
+					m.spin.Tick,
+				)
+			}
 			return m, nil
 		case key.Matches(msg, m.keys.OpenURL):
 			var url string
@@ -261,6 +272,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case articleMarkedMsg:
 		m.err = nil
+		return m, nil
+
+	case fullArticleLoadedMsg:
+		m.fetching = false
+		m.status = "full article"
+		if m.readerArt != nil && m.readerArt.ID == msg.articleID {
+			m.readerArt.CachedBody = msg.markdown
+			now := time.Now().UTC()
+			m.readerArt.CachedAt = &now
+			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4))
+			m.reader.GotoTop()
+		}
 		return m, nil
 
 	case errMsg:
@@ -457,5 +481,18 @@ func markReadCmd(d *db.DB, articleID int64) tea.Cmd {
 			return errMsg{err}
 		}
 		return articleMarkedMsg{articleID: articleID}
+	}
+}
+
+func fetchFullCmd(f *feed.Fetcher, d *db.DB, articleID int64, articleURL string) tea.Cmd {
+	return func() tea.Msg {
+		md, err := f.FetchFull(context.Background(), articleURL)
+		if err != nil {
+			return errMsg{err}
+		}
+		if err := d.CacheArticle(articleID, md); err != nil {
+			return errMsg{err}
+		}
+		return fullArticleLoadedMsg{articleID: articleID, markdown: md}
 	}
 }
