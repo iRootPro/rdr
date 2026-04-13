@@ -69,29 +69,32 @@ func TestTransmit_LargeData_ChunksAt4096(t *testing.T) {
 	}
 }
 
-func TestPlaceholderBlock_EmitsFGColorAndDiacritics(t *testing.T) {
+func TestPlaceholderBlock_EmitsFGColorPerRow(t *testing.T) {
 	// 0xAABBCC: low 24 bits encode to RGB 170, 187, 204.
 	block := PlaceholderBlock(0xAABBCC, 3, 2)
 
-	if !strings.Contains(block, "\x1b[38:2:170:187:204m") {
-		t.Fatalf("missing fg color prefix: %q", block)
+	// Each row must independently set our FG color because lipgloss
+	// borders emit a reset between lines.
+	colorMarker := "\x1b[38:2:170:187:204m"
+	if count := strings.Count(block, colorMarker); count != 2 {
+		t.Fatalf("want 2 FG color prefixes (one per row), got %d: %q", count, block)
 	}
-	if !strings.HasSuffix(block, "\x1b[0m") {
-		t.Fatalf("missing SGR reset: %q", block)
+	if count := strings.Count(block, "\x1b[0m"); count != 2 {
+		t.Fatalf("want 2 SGR resets (one per row), got %d", count)
 	}
 
-	// Strip color codes and inspect the cell grid.
-	stripped := strings.TrimPrefix(block, "\x1b[38:2:170:187:204m")
-	stripped = strings.TrimSuffix(stripped, "\x1b[0m")
-	lines := strings.Split(strings.TrimRight(stripped, "\n"), "\n")
+	// Validate placeholder cell structure in each row.
+	lines := strings.Split(strings.TrimRight(block, "\n"), "\n")
 	if len(lines) != 2 {
-		t.Fatalf("want 2 rows, got %d: %q", len(lines), stripped)
+		t.Fatalf("want 2 rows, got %d", len(lines))
 	}
 	for _, line := range lines {
-		runes := []rune(line)
+		stripped := strings.TrimPrefix(line, colorMarker)
+		stripped = strings.TrimSuffix(stripped, "\x1b[0m")
+		runes := []rune(stripped)
 		// Each cell is placeholder + 2 combining marks = 3 runes.
 		if len(runes) != 3*3 {
-			t.Fatalf("row has %d runes, want %d: %q", len(runes), 3*3, line)
+			t.Fatalf("row has %d runes, want 9: %q", len(runes), stripped)
 		}
 		for i := 0; i < len(runes); i += 3 {
 			if runes[i] != 0x10EEEE {
