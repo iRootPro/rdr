@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -368,12 +369,37 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = !m.showHelp
 		m.help.ShowAll = m.showHelp
 		return m, nil
+	case msg.String() == "a":
+		m.settingsMode = smAddName
+		m.settingsInput.SetValue("")
+		m.settingsInput.Focus()
+		return m, textinput.Blink
 	}
 	return m, nil
 }
 
 func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
-	// Populated in Task 2 (Add) and Task 3 (Rename).
+	value := strings.TrimSpace(m.settingsInput.Value())
+	if value == "" {
+		return m, nil
+	}
+	switch m.settingsMode {
+	case smAddName:
+		m.pendingName = value
+		m.settingsMode = smAddURL
+		m.settingsInput.SetValue("")
+		return m, textinput.Blink
+	case smAddURL:
+		if _, err := m.db.UpsertFeed(m.pendingName, value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.pendingName = ""
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, loadFeedsCmd(m.db)
+	}
 	return m, nil
 }
 
