@@ -3,6 +3,6 @@ module github.com/iRootPro/rdr
 go 1.26.1
 
 require (
-	github.com/mattn/go-sqlite3 v1.14.42 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	github.com/mattn/go-sqlite3 v1.14.42
+	gopkg.in/yaml.v3 v3.0.1
 )
