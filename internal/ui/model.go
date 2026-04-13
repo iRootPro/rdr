@@ -55,8 +55,9 @@ type Model struct {
 	spin     spinner.Model
 	fetching bool
 
-	reader    viewport.Model
-	readerArt *db.Article
+	reader         viewport.Model
+	readerArt      *db.Article
+	readerTransmits string
 
 	help     help.Model
 	showHelp bool
@@ -124,7 +125,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reader.Height = m.height - 2
 		if m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.kittyOn, m.imageCache))
+			content, tx := buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.kittyOn, m.imageCache)
+			m.reader.SetContent(content)
+			m.readerTransmits = tx
 		}
 		return m, nil
 
@@ -320,7 +323,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			now := time.Now().UTC()
 			m.readerArt.CachedAt = &now
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.kittyOn, m.imageCache))
+			content, tx := buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.kittyOn, m.imageCache)
+			m.reader.SetContent(content)
+			m.readerTransmits = tx
 			m.reader.GotoTop()
 		}
 		return m, nil
@@ -452,7 +457,9 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
 	feedName := readerFeedName(m.feeds, a.FeedID)
-	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4, m.kittyOn, m.imageCache))
+	content, tx := buildReaderContent(a, feedName, m.reader.Width-4, m.kittyOn, m.imageCache)
+	m.reader.SetContent(content)
+	m.readerTransmits = tx
 	m.reader.GotoTop()
 	if a.ReadAt == nil {
 		return m, markReadCmd(m.db, a.ID)
@@ -576,7 +583,10 @@ func (m Model) View() string {
 		}
 		status := statusBar.Width(m.width).Render(statusText)
 		body := paneActive.Width(m.width - 2).Height(m.height - 2 - helpH).Render(m.reader.View())
-		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+		frame := lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+		// Raw transmits go AFTER all lipgloss processing so the APC
+		// escapes survive intact. Kitty dedupes by image ID.
+		return frame + m.readerTransmits
 	}
 
 	leftW := m.width/3 - 2
