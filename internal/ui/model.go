@@ -584,9 +584,11 @@ func (m Model) View() string {
 		status := statusBar.Width(m.width).Render(statusText)
 		body := paneActive.Width(m.width - 2).Height(m.height - 2 - helpH).Render(m.reader.View())
 		frame := lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
-		// Raw transmits go AFTER all lipgloss processing so the APC
-		// escapes survive intact. Kitty dedupes by image ID.
-		return frame + m.readerTransmits
+		// Raw transmits go BEFORE the frame so Kitty has image data in
+		// memory by the time it processes the placeholder cells in the
+		// frame. They're also kept out of lipgloss processing because
+		// APC terminators `\x1b\\` get mangled by Render.
+		return m.readerTransmits + frame
 	}
 
 	leftW := m.width/3 - 2
