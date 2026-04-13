@@ -205,3 +205,31 @@ func TestFetchAll_ContinuesAfterPerFeedError(t *testing.T) {
 		t.Fatalf("good feed articles: got %d, want 3", len(articles))
 	}
 }
+
+func TestFetchAll_ContextCancelSurfaces(t *testing.T) {
+	d := openTestDB(t)
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-block
+	}))
+	defer srv.Close()
+	defer close(block)
+
+	if _, err := d.UpsertFeed("Slow", srv.URL); err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	f := New(d)
+	results, err := f.FetchAll(ctx)
+	// Cancel must surface either as outer err (semaphore-wait branch)
+	// or as a per-feed err inside results (FetchOne's ctx-aware HTTP path).
+	if err != nil {
+		return
+	}
+	if len(results) == 0 || results[0].Err == nil {
+		t.Fatalf("expected cancellation to surface, got clean results %+v", results)
+	}
+}
