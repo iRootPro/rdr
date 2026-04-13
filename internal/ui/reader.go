@@ -77,7 +77,13 @@ func imageURLs(md string) []string {
 
 func imageID(url string) uint32 {
 	sum := sha256.Sum256([]byte(url))
-	return binary.BigEndian.Uint32(sum[:4])
+	id := binary.BigEndian.Uint32(sum[:4])
+	// The low 24 bits encode the placeholder FG color — all-zero would
+	// be invisible. Force at least one bit in each byte.
+	if id&0x00ffffff == 0 {
+		id |= 0x00010101
+	}
+	return id
 }
 
 // toPNG decodes any format Go's image package can read and re-encodes
@@ -157,8 +163,7 @@ func renderWithKittyImages(md string, width int, imageCache string) (string, str
 			}
 			id := imageID(spec.url)
 			cols, rows := imageCells(data, width)
-			transmits.WriteString(kitty.Transmit(id, pngData))
-			transmits.WriteString(kitty.Placement(id, cols, rows))
+			transmits.WriteString(kitty.Transmit(id, pngData, cols, rows))
 			content.WriteString("\n")
 			content.WriteString(kitty.PlaceholderBlock(id, cols, rows))
 			content.WriteString("\n")
