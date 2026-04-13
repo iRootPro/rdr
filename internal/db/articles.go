@@ -21,6 +21,11 @@ type Article struct {
 	CreatedAt   time.Time
 }
 
+// UpsertArticle inserts or updates an article and returns whether the row
+// was newly inserted. The pre-check is racy under concurrent writers to
+// the same (feed_id, url): the upsert itself is atomic, so rows stay
+// consistent, but the inserted flag may be off — fetcher loops are
+// per-feed serial so this is dormant in practice.
 func (d *DB) UpsertArticle(a Article) (bool, error) {
 	var existed int
 	err := d.sql.QueryRow(
