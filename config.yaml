@@ -1,0 +1,9 @@
+# rdr feed list — synced into ~/.config/rdr/rdr.db on every start.
+# Removing entries here does NOT delete feeds from the database.
+feeds:
+  - name: Hacker News
+    url: https://hnrss.org/frontpage
+  - name: Go Blog
+    url: https://go.dev/blog/feed.atom
+  - name: Lobsters
+    url: https://lobste.rs/rss
