@@ -18,6 +18,8 @@ type FeedEntry struct {
 	URL  string `yaml:"url"`
 }
 
+// Load reads <home>/config.yaml. A missing file yields an empty Config
+// (not an error) so first-run users get a usable zero state.
 func Load(home string) (*Config, error) {
 	path := filepath.Join(home, "config.yaml")
 	data, err := os.ReadFile(path)
