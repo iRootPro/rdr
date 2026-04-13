@@ -141,3 +141,31 @@ func TestUpsertArticle_ReturnsInsertedFlag(t *testing.T) {
 		t.Fatalf("second upsert: expected inserted=false")
 	}
 }
+
+func TestCacheArticle_SetsCachedBodyAndCachedAt(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	a := newArticle(f.ID, "https://a.example/1", "v1", time.Now().UTC())
+	if _, err := d.UpsertArticle(a); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	list, _ := d.ListArticles(f.ID, 10)
+	if len(list) != 1 {
+		t.Fatalf("want 1 article, got %d", len(list))
+	}
+	id := list[0].ID
+	if list[0].CachedBody != "" || list[0].CachedAt != nil {
+		t.Fatalf("pre-cache state wrong: %+v", list[0])
+	}
+
+	if err := d.CacheArticle(id, "# Hello\n\nBody"); err != nil {
+		t.Fatalf("CacheArticle: %v", err)
+	}
+	list, _ = d.ListArticles(f.ID, 10)
+	if list[0].CachedBody != "# Hello\n\nBody" {
+		t.Fatalf("cached_body: %q", list[0].CachedBody)
+	}
+	if list[0].CachedAt == nil {
+		t.Fatalf("cached_at is nil after CacheArticle")
+	}
+}

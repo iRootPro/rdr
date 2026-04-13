@@ -109,6 +109,17 @@ func (d *DB) MarkRead(articleID int64) error {
 	return err
 }
 
+func (d *DB) CacheArticle(id int64, body string) error {
+	_, err := d.sql.Exec(
+		`UPDATE articles SET cached_body = ?, cached_at = ? WHERE id = ?`,
+		body, time.Now().UTC(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("cache article: %w", err)
+	}
+	return nil
+}
+
 // TrimArticles deletes the oldest read articles for a feed so that at most
 // `max` rows remain. Unread articles are always kept, even if this leaves
 // the feed above the limit.
