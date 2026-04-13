@@ -1,0 +1,12 @@
+# build artifacts
+/rdr
+
+# local dev state
+/dev/
+*.db
+*.db-journal
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
