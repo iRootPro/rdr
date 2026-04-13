@@ -55,7 +55,7 @@ func (d *DB) UpsertFeed(name, url string) (Feed, error) {
 func (d *DB) ListFeeds() ([]Feed, error) {
 	rows, err := d.sql.Query(`
 		SELECT f.id, f.name, f.url, f.position, f.created_at,
-		       COALESCE(SUM(CASE WHEN a.read_at IS NULL THEN 1 ELSE 0 END), 0)
+		       COUNT(CASE WHEN a.id IS NOT NULL AND a.read_at IS NULL THEN 1 END)
 		FROM feeds f
 		LEFT JOIN articles a ON a.feed_id = f.id
 		GROUP BY f.id
