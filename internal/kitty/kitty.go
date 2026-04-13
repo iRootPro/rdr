@@ -76,10 +76,15 @@ func PlaceholderBlock(id uint32, cols, rows int) string {
 	r := byte((id >> 16) & 0xff)
 	g := byte((id >> 8) & 0xff)
 	bv := byte(id & 0xff)
+	colorPrefix := fmt.Sprintf("\x1b[38:2:%d:%d:%dm", r, g, bv)
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "\x1b[38:2:%d:%d:%dm", r, g, bv)
 	for row := 0; row < rows; row++ {
+		// Set our FG color at the start of EVERY row. Pane borders
+		// (lipgloss) emit their own SGR reset between lines, so we
+		// must re-apply the image-id color on each row or subsequent
+		// placeholder cells lose their image association.
+		b.WriteString(colorPrefix)
 		rowRune := diacritics[row]
 		for col := 0; col < cols; col++ {
 			colRune := diacritics[col]
@@ -87,8 +92,7 @@ func PlaceholderBlock(id uint32, cols, rows int) string {
 			b.WriteRune(rowRune)
 			b.WriteRune(colRune)
 		}
-		b.WriteRune('\n')
+		b.WriteString("\x1b[0m\n")
 	}
-	b.WriteString("\x1b[0m")
 	return b.String()
 }
