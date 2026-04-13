@@ -141,6 +141,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case feedsLoadedMsg:
 		m.feeds = msg.feeds
+		m.err = nil
 		if !m.fetching {
 			m.status = "ready"
 		}
@@ -153,6 +154,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case articlesLoadedMsg:
+		m.err = nil
 		if len(m.feeds) > 0 && m.feeds[m.selFeed].ID == msg.feedID {
 			m.articles = msg.articles
 			m.selArt = 0
@@ -248,11 +250,11 @@ func clamp(v, lo, hi int) int {
 }
 
 func (m Model) View() string {
-	if m.err != nil {
-		return errStyle.Render("error: "+m.err.Error()) + "\n"
-	}
 	if m.width == 0 || m.height == 0 {
 		return "rdr — " + m.status
+	}
+	if m.width < 40 || m.height < 10 {
+		return "rdr: terminal too small"
 	}
 
 	leftW := m.width/3 - 2
@@ -273,6 +275,9 @@ func (m Model) View() string {
 	statusText := "rdr · " + m.status
 	if m.fetching {
 		statusText = "rdr · " + m.spin.View() + " " + m.status
+	}
+	if m.err != nil {
+		statusText += "  " + errStyle.Render("! "+m.err.Error())
 	}
 	status := statusBar.Width(m.width).Render(statusText)
 
