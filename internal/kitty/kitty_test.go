@@ -34,20 +34,19 @@ func TestIsSupported_DetectsEnvVars(t *testing.T) {
 	}
 }
 
-func TestTransmit_SingleChunk_EmitsEscapeSequence(t *testing.T) {
+func TestTransmit_SingleChunk_EmitsCombinedDirective(t *testing.T) {
 	data := []byte("hello")
-	out := Transmit(42, data)
+	out := Transmit(42, data, 10, 5)
 	if !strings.HasPrefix(out, "\x1b_G") {
 		t.Fatalf("missing prefix: %q", out)
 	}
 	if !strings.HasSuffix(out, "\x1b\\") {
 		t.Fatalf("missing suffix: %q", out)
 	}
-	if !strings.Contains(out, "i=42") {
-		t.Fatalf("missing id: %q", out)
-	}
-	if !strings.Contains(out, "f=100") {
-		t.Fatalf("missing format: %q", out)
+	for _, want := range []string{"a=T", "q=2", "f=100", "U=1", "i=42", "c=10", "r=5"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in %q", want, out)
+		}
 	}
 	expectedB64 := base64.StdEncoding.EncodeToString(data)
 	if !strings.Contains(out, expectedB64) {
@@ -60,7 +59,7 @@ func TestTransmit_LargeData_ChunksAt4096(t *testing.T) {
 	for i := range data {
 		data[i] = byte(i)
 	}
-	out := Transmit(1, data)
+	out := Transmit(1, data, 40, 15)
 	envelopes := strings.Count(out, "\x1b\\")
 	if envelopes < 4 {
 		t.Fatalf("expected ≥4 chunks, got %d envelopes", envelopes)
@@ -70,33 +69,34 @@ func TestTransmit_LargeData_ChunksAt4096(t *testing.T) {
 	}
 }
 
-func TestPlaceholderBlock_DimensionsAndEncoding(t *testing.T) {
-	block := PlaceholderBlock(1, 3, 2)
-	lines := strings.Split(strings.TrimRight(block, "\n"), "\n")
+func TestPlaceholderBlock_EmitsFGColorAndDiacritics(t *testing.T) {
+	// 0xAABBCC: low 24 bits encode to RGB 170, 187, 204.
+	block := PlaceholderBlock(0xAABBCC, 3, 2)
+
+	if !strings.Contains(block, "\x1b[38:2:170:187:204m") {
+		t.Fatalf("missing fg color prefix: %q", block)
+	}
+	if !strings.HasSuffix(block, "\x1b[0m") {
+		t.Fatalf("missing SGR reset: %q", block)
+	}
+
+	// Strip color codes and inspect the cell grid.
+	stripped := strings.TrimPrefix(block, "\x1b[38:2:170:187:204m")
+	stripped = strings.TrimSuffix(stripped, "\x1b[0m")
+	lines := strings.Split(strings.TrimRight(stripped, "\n"), "\n")
 	if len(lines) != 2 {
-		t.Fatalf("want 2 rows, got %d: %q", len(lines), block)
+		t.Fatalf("want 2 rows, got %d: %q", len(lines), stripped)
 	}
 	for _, line := range lines {
 		runes := []rune(line)
-		if len(runes) != 3*4 {
-			t.Fatalf("row has %d runes, want %d: %q", len(runes), 3*4, line)
+		// Each cell is placeholder + 2 combining marks = 3 runes.
+		if len(runes) != 3*3 {
+			t.Fatalf("row has %d runes, want %d: %q", len(runes), 3*3, line)
 		}
-		for i := 0; i < len(runes); i += 4 {
+		for i := 0; i < len(runes); i += 3 {
 			if runes[i] != 0x10EEEE {
-				t.Fatalf("cell %d: got %U, want U+10EEEE", i/4, runes[i])
+				t.Fatalf("cell %d: got %U, want U+10EEEE", i/3, runes[i])
 			}
-		}
-	}
-}
-
-func TestPlacement_EmitsVirtualPlacementEscape(t *testing.T) {
-	out := Placement(7, 10, 5)
-	if !strings.HasPrefix(out, "\x1b_G") || !strings.HasSuffix(out, "\x1b\\") {
-		t.Fatalf("envelope: %q", out)
-	}
-	for _, want := range []string{"a=p", "U=1", "i=7", "q=2"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in %q", want, out)
 		}
 	}
 }
