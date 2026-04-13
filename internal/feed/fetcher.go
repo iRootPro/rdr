@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/iRootPro/rdr/internal/db"
 )
@@ -61,6 +62,40 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 		}
 	}
 	return result, nil
+}
+
+func (f *Fetcher) FetchAll(ctx context.Context) ([]FetchResult, error) {
+	feeds, err := f.db.ListFeeds()
+	if err != nil {
+		return nil, fmt.Errorf("list feeds: %w", err)
+	}
+	results := make([]FetchResult, len(feeds))
+	g, gctx := errgroup.WithContext(ctx)
+	sem := make(chan struct{}, 8)
+
+	for i, feed := range feeds {
+		i, feed := i, feed
+		g.Go(func() error {
+			select {
+			case sem <- struct{}{}:
+			case <-gctx.Done():
+				return gctx.Err()
+			}
+			defer func() { <-sem }()
+
+			r, err := f.FetchOne(gctx, feed)
+			if err != nil {
+				results[i] = FetchResult{Feed: feed, Err: err}
+				return nil
+			}
+			results[i] = r
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return results, err
+	}
+	return results, nil
 }
 
 func (f *Fetcher) get(ctx context.Context, url string) (io.ReadCloser, error) {
