@@ -38,7 +38,10 @@ func TestFetchOne_AtomHappyPath(t *testing.T) {
 	srv := serveFixture(t, "atom_feed.xml")
 	defer srv.Close()
 
-	feed, _ := d.UpsertFeed("Example", srv.URL)
+	feed, err := d.UpsertFeed("Example", srv.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
 
 	f := New(d)
 	result, err := f.FetchOne(context.Background(), feed)
