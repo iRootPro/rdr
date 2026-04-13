@@ -3,8 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +16,6 @@ import (
 
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
-	"github.com/iRootPro/rdr/internal/kitty"
 )
 
 type focus int
@@ -56,17 +53,13 @@ type Model struct {
 	spin     spinner.Model
 	fetching bool
 
-	reader         viewport.Model
-	readerArt      *db.Article
-	readerTransmits string
+	reader    viewport.Model
+	readerArt *db.Article
 
 	help     help.Model
 	showHelp bool
 
 	feedErrors map[int64]error
-
-	kittyOn    bool
-	imageCache string
 
 	settingsMode  settingsMode
 	settingsSel   int
@@ -77,7 +70,7 @@ type Model struct {
 	err    error
 }
 
-func New(database *db.DB, fetcher *feed.Fetcher, home string) Model {
+func New(database *db.DB, fetcher *feed.Fetcher) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(colorAccent)
@@ -104,8 +97,6 @@ func New(database *db.DB, fetcher *feed.Fetcher, home string) Model {
 		help:          h,
 		feedErrors:    map[int64]error{},
 		settingsInput: ti,
-		kittyOn:       kitty.IsSupported(),
-		imageCache:    filepath.Join(home, "cache", "images"),
 	}
 }
 
@@ -126,9 +117,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reader.Height = m.height - 2
 		if m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			content, tx := buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.kittyOn, m.imageCache)
-			m.reader.SetContent(content)
-			m.readerTransmits = tx
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4))
 		}
 		return m, nil
 
@@ -153,7 +142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.fetching = true
 				m.status = "loading full…"
 				return m, tea.Batch(
-					fetchFullCmd(m.fetcher, m.db, m.readerArt.ID, m.readerArt.URL, m.imageCache),
+					fetchFullCmd(m.fetcher, m.db, m.readerArt.ID, m.readerArt.URL),
 					m.spin.Tick,
 				)
 			}
@@ -324,9 +313,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			now := time.Now().UTC()
 			m.readerArt.CachedAt = &now
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			content, tx := buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.kittyOn, m.imageCache)
-			m.reader.SetContent(content)
-			m.readerTransmits = tx
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4))
 			m.reader.GotoTop()
 		}
 		return m, nil
@@ -458,9 +445,7 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
 	feedName := readerFeedName(m.feeds, a.FeedID)
-	content, tx := buildReaderContent(a, feedName, m.reader.Width-4, m.kittyOn, m.imageCache)
-	m.reader.SetContent(content)
-	m.readerTransmits = tx
+	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4))
 	m.reader.GotoTop()
 	if a.ReadAt == nil {
 		return m, markReadCmd(m.db, a.ID)
@@ -585,11 +570,7 @@ func (m Model) View() string {
 		status := statusBar.Width(m.width).Render(statusText)
 		body := paneActive.Width(m.width - 2).Height(m.height - 2 - helpH).Render(m.reader.View())
 		frame := lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
-		out := m.readerTransmits + frame
-		if os.Getenv("RDR_DUMP_VIEW") != "" {
-			_ = os.WriteFile("/tmp/rdr-view.bin", []byte(out), 0o644)
-		}
-		return out
+		return frame
 	}
 
 	leftW := m.width/3 - 2
@@ -665,7 +646,7 @@ func markReadCmd(d *db.DB, articleID int64) tea.Cmd {
 	}
 }
 
-func fetchFullCmd(f *feed.Fetcher, d *db.DB, articleID int64, articleURL, imageCache string) tea.Cmd {
+func fetchFullCmd(f *feed.Fetcher, d *db.DB, articleID int64, articleURL string) tea.Cmd {
 	return func() tea.Msg {
 		md, err := f.FetchFull(context.Background(), articleURL)
 		if err != nil {
@@ -673,11 +654,6 @@ func fetchFullCmd(f *feed.Fetcher, d *db.DB, articleID int64, articleURL, imageC
 		}
 		if err := d.CacheArticle(articleID, md); err != nil {
 			return errMsg{err}
-		}
-		if imageCache != "" {
-			if urls := imageURLs(md); len(urls) > 0 {
-				_, _ = feed.DownloadImages(context.Background(), urls, imageCache)
-			}
 		}
 		return fullArticleLoadedMsg{articleID: articleID, markdown: md}
 	}
