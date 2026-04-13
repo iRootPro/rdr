@@ -78,7 +78,10 @@ func TestFetchOne_IsIdempotent(t *testing.T) {
 	d := openTestDB(t)
 	srv := serveFixture(t, "atom_feed.xml")
 	defer srv.Close()
-	feed, _ := d.UpsertFeed("Example", srv.URL)
+	feed, err := d.UpsertFeed("Example", srv.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
 
 	f := New(d)
 	if _, err := f.FetchOne(context.Background(), feed); err != nil {
@@ -102,7 +105,10 @@ func TestFetchOne_MalformedXMLReturnsError(t *testing.T) {
 		_, _ = w.Write([]byte("<not xml at all"))
 	}))
 	defer srv.Close()
-	feed, _ := d.UpsertFeed("Bad", srv.URL)
+	feed, err := d.UpsertFeed("Bad", srv.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
 
 	f := New(d)
 	if _, err := f.FetchOne(context.Background(), feed); err == nil {
@@ -116,7 +122,10 @@ func TestFetchOne_HTTP500ReturnsError(t *testing.T) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	feed, _ := d.UpsertFeed("Boom", srv.URL)
+	feed, err := d.UpsertFeed("Boom", srv.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
 
 	f := New(d)
 	if _, err := f.FetchOne(context.Background(), feed); err == nil {
@@ -128,13 +137,19 @@ func TestFetchOne_EmptyTitleUsesFallback(t *testing.T) {
 	d := openTestDB(t)
 	srv := serveFixture(t, "notitle_feed.xml")
 	defer srv.Close()
-	feed, _ := d.UpsertFeed("NoTitle", srv.URL)
+	feed, err := d.UpsertFeed("NoTitle", srv.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
 
 	f := New(d)
 	if _, err := f.FetchOne(context.Background(), feed); err != nil {
 		t.Fatalf("FetchOne: %v", err)
 	}
-	articles, _ := d.ListArticles(feed.ID, 10)
+	articles, err := d.ListArticles(feed.ID, 10)
+	if err != nil {
+		t.Fatalf("ListArticles: %v", err)
+	}
 	if len(articles) != 1 {
 		t.Fatalf("articles: got %d, want 1", len(articles))
 	}
