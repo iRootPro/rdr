@@ -46,6 +46,8 @@ type Model struct {
 	help     help.Model
 	showHelp bool
 
+	feedErrors map[int64]error
+
 	status string
 	err    error
 }
@@ -68,8 +70,9 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 		status:   "fetching…",
 		spin:     s,
 		fetching: true,
-		reader:   viewport.New(0, 0),
-		help:     h,
+		reader:     viewport.New(0, 0),
+		help:       h,
+		feedErrors: map[int64]error{},
 	}
 }
 
@@ -213,9 +216,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case fetchDoneMsg:
 		m.fetching = false
+		m.feedErrors = map[int64]error{}
 		var failed int
 		for _, r := range msg.results {
 			if r.Err != nil {
+				m.feedErrors[r.Feed.ID] = r.Err
 				failed++
 			}
 		}
@@ -392,7 +397,7 @@ func (m Model) View() string {
 	}
 	paneH := m.height - 2 - helpH
 
-	left := renderFeedList(m.feeds, m.selFeed, m.focus == focusFeeds, leftW, paneH)
+	left := renderFeedList(m.feeds, m.feedErrors, m.selFeed, m.focus == focusFeeds, leftW, paneH)
 	right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH)
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
