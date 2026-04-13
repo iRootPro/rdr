@@ -85,6 +85,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.moveDown()
 		case key.Matches(msg, m.keys.Up):
 			return m.moveUp()
+		case key.Matches(msg, m.keys.Right), key.Matches(msg, m.keys.Enter):
+			if m.focus == focusFeeds && len(m.articles) > 0 {
+				m.focus = focusArticles
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.Left), key.Matches(msg, m.keys.Back):
+			if m.focus == focusArticles {
+				m.focus = focusFeeds
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.Top):
+			return m.moveTo(0)
+		case key.Matches(msg, m.keys.Bottom):
+			return m.moveToEnd()
+		case key.Matches(msg, m.keys.PageDown):
+			return m.moveByPage(+1)
+		case key.Matches(msg, m.keys.PageUp):
+			return m.moveByPage(-1)
 		case key.Matches(msg, m.keys.RefreshAll), key.Matches(msg, m.keys.RefreshOne):
 			if m.fetching {
 				return m, nil
@@ -176,6 +194,57 @@ func (m Model) moveUp() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m Model) moveTo(idx int) (tea.Model, tea.Cmd) {
+	switch m.focus {
+	case focusFeeds:
+		if idx < 0 || idx >= len(m.feeds) {
+			return m, nil
+		}
+		m.selFeed = idx
+		return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+	case focusArticles:
+		if idx < 0 || idx >= len(m.articles) {
+			return m, nil
+		}
+		m.selArt = idx
+	}
+	return m, nil
+}
+
+func (m Model) moveToEnd() (tea.Model, tea.Cmd) {
+	switch m.focus {
+	case focusFeeds:
+		return m.moveTo(len(m.feeds) - 1)
+	case focusArticles:
+		return m.moveTo(len(m.articles) - 1)
+	}
+	return m, nil
+}
+
+func (m Model) moveByPage(dir int) (tea.Model, tea.Cmd) {
+	step := m.height - 4
+	if step < 1 {
+		step = 1
+	}
+	switch m.focus {
+	case focusFeeds:
+		return m.moveTo(clamp(m.selFeed+dir*step, 0, len(m.feeds)-1))
+	case focusArticles:
+		return m.moveTo(clamp(m.selArt+dir*step, 0, len(m.articles)-1))
+	}
+	return m, nil
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func (m Model) View() string {
