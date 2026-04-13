@@ -57,18 +57,73 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if key.Matches(msg, m.keys.Quit) {
+		switch {
+		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
+		case key.Matches(msg, m.keys.Tab):
+			if m.focus == focusFeeds {
+				m.focus = focusArticles
+			} else {
+				m.focus = focusFeeds
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.Down):
+			return m.moveDown()
+		case key.Matches(msg, m.keys.Up):
+			return m.moveUp()
 		}
 
 	case feedsLoadedMsg:
 		m.feeds = msg.feeds
 		m.status = "ready"
+		if len(m.feeds) > 0 {
+			if m.selFeed >= len(m.feeds) {
+				m.selFeed = 0
+			}
+			return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+		}
+		return m, nil
+
+	case articlesLoadedMsg:
+		if len(m.feeds) > 0 && m.feeds[m.selFeed].ID == msg.feedID {
+			m.articles = msg.articles
+			m.selArt = 0
+		}
 		return m, nil
 
 	case errMsg:
 		m.err = msg.err
 		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) moveDown() (tea.Model, tea.Cmd) {
+	switch m.focus {
+	case focusFeeds:
+		if m.selFeed < len(m.feeds)-1 {
+			m.selFeed++
+			return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+		}
+	case focusArticles:
+		if m.selArt < len(m.articles)-1 {
+			m.selArt++
+		}
+	}
+	return m, nil
+}
+
+func (m Model) moveUp() (tea.Model, tea.Cmd) {
+	switch m.focus {
+	case focusFeeds:
+		if m.selFeed > 0 {
+			m.selFeed--
+			return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+		}
+	case focusArticles:
+		if m.selArt > 0 {
+			m.selArt--
+		}
 	}
 	return m, nil
 }
@@ -85,13 +140,19 @@ func (m Model) View() string {
 	if leftW < 10 {
 		leftW = 10
 	}
+	rightW := m.width - leftW - 4
+	if rightW < 10 {
+		rightW = 10
+	}
 	paneH := m.height - 2
 
 	left := renderFeedList(m.feeds, m.selFeed, m.focus == focusFeeds, leftW, paneH)
+	right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH)
 
+	row := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	status := statusBar.Width(m.width).Render("rdr · " + m.status)
 
-	return lipgloss.JoinVertical(lipgloss.Top, left, status)
+	return lipgloss.JoinVertical(lipgloss.Top, row, status)
 }
 
 func loadFeedsCmd(d *db.DB) tea.Cmd {
