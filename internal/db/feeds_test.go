@@ -101,6 +101,27 @@ func TestListFeeds_ZeroArticlesReportsZeroUnread(t *testing.T) {
 	}
 }
 
+func TestRenameFeed_ChangesNameKeepsURL(t *testing.T) {
+	d := openTestDB(t)
+	f, err := d.UpsertFeed("Old", "https://a.example/rss")
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
+	if err := d.RenameFeed(f.ID, "New"); err != nil {
+		t.Fatalf("RenameFeed: %v", err)
+	}
+	feeds, _ := d.ListFeeds()
+	if len(feeds) != 1 {
+		t.Fatalf("want 1 feed, got %d", len(feeds))
+	}
+	if feeds[0].Name != "New" {
+		t.Fatalf("name: got %q, want %q", feeds[0].Name, "New")
+	}
+	if feeds[0].URL != "https://a.example/rss" {
+		t.Fatalf("url changed: %q", feeds[0].URL)
+	}
+}
+
 func mustExec(t *testing.T, d *DB, query string, args ...any) {
 	t.Helper()
 	if _, err := d.sql.Exec(query, args...); err != nil {

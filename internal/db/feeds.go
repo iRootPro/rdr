@@ -98,3 +98,8 @@ func (d *DB) DeleteFeed(id int64) error {
 	_, err := d.sql.Exec(`DELETE FROM feeds WHERE id = ?`, id)
 	return err
 }
+
+func (d *DB) RenameFeed(id int64, name string) error {
+	_, err := d.sql.Exec(`UPDATE feeds SET name = ? WHERE id = ?`, name, id)
+	return err
+}
