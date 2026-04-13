@@ -157,3 +157,51 @@ func TestFetchOne_EmptyTitleUsesFallback(t *testing.T) {
 		t.Fatalf("title fallback: got %q", articles[0].Title)
 	}
 }
+
+func TestFetchAll_ContinuesAfterPerFeedError(t *testing.T) {
+	d := openTestDB(t)
+	good := serveFixture(t, "atom_feed.xml")
+	defer good.Close()
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<broken"))
+	}))
+	defer bad.Close()
+
+	goodFeed, err := d.UpsertFeed("Good", good.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed good: %v", err)
+	}
+	badFeed, err := d.UpsertFeed("Bad", bad.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed bad: %v", err)
+	}
+
+	f := New(d)
+	results, err := f.FetchAll(context.Background())
+	if err != nil {
+		t.Fatalf("FetchAll: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results: got %d, want 2", len(results))
+	}
+
+	byID := map[int64]FetchResult{
+		results[0].Feed.ID: results[0],
+		results[1].Feed.ID: results[1],
+	}
+	if g := byID[goodFeed.ID]; g.Err != nil || g.Added != 3 {
+		t.Fatalf("good feed: Err=%v Added=%d", g.Err, g.Added)
+	}
+	if b := byID[badFeed.ID]; b.Err == nil {
+		t.Fatalf("bad feed: expected error, got Added=%d", b.Added)
+	}
+
+	// The good feed's articles must be in the database despite the bad feed failing.
+	articles, err := d.ListArticles(goodFeed.ID, 10)
+	if err != nil {
+		t.Fatalf("ListArticles: %v", err)
+	}
+	if len(articles) != 3 {
+		t.Fatalf("good feed articles: got %d, want 3", len(articles))
+	}
+}
