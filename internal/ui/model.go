@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -22,6 +23,16 @@ const (
 	focusFeeds focus = iota
 	focusArticles
 	focusReader
+	focusSettings
+)
+
+type settingsMode int
+
+const (
+	smList settingsMode = iota
+	smAddName
+	smAddURL
+	smRename
 )
 
 type Model struct {
@@ -49,6 +60,11 @@ type Model struct {
 
 	feedErrors map[int64]error
 
+	settingsMode  settingsMode
+	settingsSel   int
+	settingsInput textinput.Model
+	pendingName   string
+
 	status string
 	err    error
 }
@@ -64,6 +80,11 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 	h.Styles.FullKey = lipgloss.NewStyle().Foreground(colorAccent)
 	h.Styles.FullDesc = lipgloss.NewStyle().Foreground(colorMuted)
 
+	ti := textinput.New()
+	ti.CharLimit = 256
+	ti.Prompt = "› "
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent)
+
 	return Model{
 		db:       database,
 		fetcher:  fetcher,
@@ -71,9 +92,10 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 		status:   "fetching…",
 		spin:     s,
 		fetching: true,
-		reader:     viewport.New(0, 0),
-		help:       h,
-		feedErrors: map[int64]error{},
+		reader:        viewport.New(0, 0),
+		help:          h,
+		feedErrors:    map[int64]error{},
+		settingsInput: ti,
 	}
 }
 
@@ -99,9 +121,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.focus == focusSettings {
+			return m.updateSettings(msg)
+		}
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
+		case key.Matches(msg, m.keys.Settings):
+			m.focus = focusSettings
+			m.settingsMode = smList
+			m.settingsSel = 0
+			return m, nil
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = !m.showHelp
 			m.help.ShowAll = m.showHelp
@@ -294,6 +324,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.settingsMode != smList {
+		switch {
+		case key.Matches(msg, m.keys.Back):
+			m.settingsMode = smList
+			m.settingsInput.Blur()
+			m.settingsInput.SetValue("")
+			return m, nil
+		case key.Matches(msg, m.keys.Enter):
+			return m.settingsSubmit()
+		}
+		var cmd tea.Cmd
+		m.settingsInput, cmd = m.settingsInput.Update(msg)
+		return m, cmd
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.Quit):
+		return m, tea.Quit
+	case key.Matches(msg, m.keys.Settings), key.Matches(msg, m.keys.Back):
+		m.focus = focusFeeds
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.settingsSel < len(m.feeds)-1 {
+			m.settingsSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.settingsSel > 0 {
+			m.settingsSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.settingsSel = 0
+		return m, nil
+	case key.Matches(msg, m.keys.Bottom):
+		if len(m.feeds) > 0 {
+			m.settingsSel = len(m.feeds) - 1
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Help):
+		m.showHelp = !m.showHelp
+		m.help.ShowAll = m.showHelp
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
+	// Populated in Task 2 (Add) and Task 3 (Rename).
+	return m, nil
+}
+
 func (m Model) openReader() (tea.Model, tea.Cmd) {
 	a := m.articles[m.selArt]
 	m.readerArt = &a
@@ -400,6 +483,23 @@ func (m Model) View() string {
 
 	helpView := m.helpView()
 	helpH := lipgloss.Height(helpView)
+
+	if m.focus == focusSettings {
+		body := renderSettings(
+			m.feeds,
+			m.settingsSel,
+			m.settingsMode,
+			m.settingsInput.View(),
+			m.width,
+			m.height-1-helpH,
+		)
+		statusText := "rdr · settings"
+		if m.err != nil {
+			statusText += "  " + errStyle.Render("! "+m.err.Error())
+		}
+		status := statusBar.Width(m.width).Render(statusText)
+		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+	}
 
 	if m.focus == focusReader && m.readerArt != nil {
 		statusText := "rdr · reader"
