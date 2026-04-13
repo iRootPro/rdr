@@ -1,6 +1,15 @@
 package ui
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -8,6 +17,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/rdr/internal/db"
+	"github.com/iRootPro/rdr/internal/feed"
+	"github.com/iRootPro/rdr/internal/kitty"
 )
 
 var (
@@ -27,7 +38,97 @@ var (
 			Italic(true)
 )
 
-func buildReaderContent(a db.Article, feedName string, width int) string {
+var reImageRef = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+
+type imageRef struct {
+	alt string
+	url string
+}
+
+// extractImages returns the markdown split into text chunks around image
+// refs, plus the image refs themselves in document order.
+// len(chunks) == len(images) + 1; chunks[i] precedes images[i].
+func extractImages(md string) (chunks []string, images []imageRef) {
+	last := 0
+	for _, m := range reImageRef.FindAllStringSubmatchIndex(md, -1) {
+		chunks = append(chunks, md[last:m[0]])
+		images = append(images, imageRef{alt: md[m[2]:m[3]], url: md[m[4]:m[5]]})
+		last = m[1]
+	}
+	chunks = append(chunks, md[last:])
+	return chunks, images
+}
+
+// imageURLs returns just the URLs of every image ref in md.
+func imageURLs(md string) []string {
+	_, images := extractImages(md)
+	out := make([]string, len(images))
+	for i, im := range images {
+		out[i] = im.url
+	}
+	return out
+}
+
+func imageID(url string) uint32 {
+	sum := sha256.Sum256([]byte(url))
+	return binary.BigEndian.Uint32(sum[:4])
+}
+
+func imageCells(data []byte, termWidth int) (cols, rows int) {
+	maxCols := termWidth - 4
+	if maxCols < 10 {
+		maxCols = 10
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || cfg.Width == 0 {
+		return maxCols, 10
+	}
+	cols = maxCols
+	rows = cols * cfg.Height / cfg.Width / 2
+	if rows < 1 {
+		rows = 1
+	}
+	if rows > 30 {
+		rows = 30
+	}
+	return cols, rows
+}
+
+func renderWithKittyImages(md string, width int, imageCache string) string {
+	chunks, images := extractImages(md)
+
+	var out strings.Builder
+	for i, chunk := range chunks {
+		if chunk != "" {
+			if rendered, err := renderMarkdown(chunk, width); err == nil {
+				out.WriteString(rendered)
+			} else {
+				out.WriteString(chunk)
+			}
+		}
+		if i < len(images) {
+			spec := images[i]
+			path := filepath.Join(imageCache, feed.ImageFileName(spec.url))
+			data, err := os.ReadFile(path)
+			if err != nil {
+				out.WriteString("\n")
+				out.WriteString(readerHint.Render("[📷 " + spec.alt + "]"))
+				out.WriteString("\n")
+				continue
+			}
+			id := imageID(spec.url)
+			cols, rows := imageCells(data, width)
+			out.WriteString(kitty.Transmit(id, data))
+			out.WriteString(kitty.Placement(id, cols, rows))
+			out.WriteString("\n")
+			out.WriteString(kitty.PlaceholderBlock(id, cols, rows))
+			out.WriteString("\n")
+		}
+	}
+	return out.String()
+}
+
+func buildReaderContent(a db.Article, feedName string, width int, kittyOn bool, imageCache string) string {
 	var b strings.Builder
 
 	b.WriteString(readerTitle.Render(a.Title))
@@ -50,7 +151,9 @@ func buildReaderContent(a db.Article, feedName string, width int) string {
 	b.WriteString("\n\n")
 
 	if a.CachedBody != "" {
-		if rendered, err := renderMarkdown(a.CachedBody, width); err == nil {
+		if kittyOn && imageCache != "" {
+			b.WriteString(renderWithKittyImages(a.CachedBody, width, imageCache))
+		} else if rendered, err := renderMarkdown(a.CachedBody, width); err == nil {
 			b.WriteString(rendered)
 		} else {
 			b.WriteString(readerBody.Render(wrap(stripHTML(a.CachedBody), width)))
