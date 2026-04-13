@@ -18,6 +18,10 @@ type fetchDoneMsg struct {
 	results []feed.FetchResult
 }
 
+type articleMarkedMsg struct {
+	articleID int64
+}
+
 type errMsg struct {
 	err error
 }

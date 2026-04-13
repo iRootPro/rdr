@@ -123,9 +123,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case focusArticles:
 				m.focus = focusFeeds
+				return m, nil
 			case focusReader:
 				m.focus = focusArticles
 				m.readerArt = nil
+				cmds := []tea.Cmd{loadFeedsCmd(m.db)}
+				if len(m.feeds) > 0 {
+					cmds = append(cmds, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID))
+				}
+				return m, tea.Batch(cmds...)
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.Top):
@@ -208,8 +214,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		if len(m.feeds) > 0 && m.feeds[m.selFeed].ID == msg.feedID {
 			m.articles = msg.articles
-			m.selArt = 0
+			if m.selArt >= len(m.articles) {
+				m.selArt = 0
+			}
 		}
+		return m, nil
+
+	case articleMarkedMsg:
+		m.err = nil
 		return m, nil
 
 	case errMsg:
@@ -228,6 +240,9 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 	feedName := readerFeedName(m.feeds, a.FeedID)
 	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4))
 	m.reader.GotoTop()
+	if a.ReadAt == nil {
+		return m, markReadCmd(m.db, a.ID)
+	}
 	return m, nil
 }
 
@@ -384,5 +399,14 @@ func fetchAllCmd(f *feed.Fetcher) tea.Cmd {
 			return errMsg{err}
 		}
 		return fetchDoneMsg{results: results}
+	}
+}
+
+func markReadCmd(d *db.DB, articleID int64) tea.Cmd {
+	return func() tea.Msg {
+		if err := d.MarkRead(articleID); err != nil {
+			return errMsg{err}
+		}
+		return articleMarkedMsg{articleID: articleID}
 	}
 }
