@@ -50,10 +50,13 @@ func Transmit(id uint32, data []byte) string {
 	return b.String()
 }
 
-// Placement returns the virtual-placement escape sequence for an
-// already-transmitted image ID, declaring its size in cells.
+// Placement creates a virtual placement for an already-transmitted
+// image so Unicode placeholders referencing this ID can be drawn. The
+// actual display size is controlled by how many placeholder cells are
+// emitted, not by this directive — passing c/r here would constrain
+// Kitty's internal layout and break the placeholder mapping.
 func Placement(id uint32, cols, rows int) string {
-	return fmt.Sprintf("\x1b_Ga=p,U=1,i=%d,c=%d,r=%d,q=2\x1b\\", id, cols, rows)
+	return fmt.Sprintf("\x1b_Ga=p,U=1,i=%d,q=2\x1b\\", id)
 }
 
 // PlaceholderBlock returns a text block of Unicode placeholders that

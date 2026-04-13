@@ -94,7 +94,7 @@ func TestPlacement_EmitsVirtualPlacementEscape(t *testing.T) {
 	if !strings.HasPrefix(out, "\x1b_G") || !strings.HasSuffix(out, "\x1b\\") {
 		t.Fatalf("envelope: %q", out)
 	}
-	for _, want := range []string{"a=p", "U=1", "i=7", "c=10", "r=5", "q=2"} {
+	for _, want := range []string{"a=p", "U=1", "i=7", "q=2"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in %q", want, out)
 		}
