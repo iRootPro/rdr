@@ -84,6 +84,23 @@ func TestDeleteFeed_CascadesArticles(t *testing.T) {
 	}
 }
 
+func TestListFeeds_ZeroArticlesReportsZeroUnread(t *testing.T) {
+	d := openTestDB(t)
+	if _, err := d.UpsertFeed("Empty", "https://empty.example/rss"); err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
+	feeds, err := d.ListFeeds()
+	if err != nil {
+		t.Fatalf("ListFeeds: %v", err)
+	}
+	if len(feeds) != 1 {
+		t.Fatalf("want 1 feed, got %d", len(feeds))
+	}
+	if feeds[0].UnreadCount != 0 {
+		t.Fatalf("zero-article feed unread: got %d, want 0", feeds[0].UnreadCount)
+	}
+}
+
 func mustExec(t *testing.T, d *DB, query string, args ...any) {
 	t.Helper()
 	if _, err := d.sql.Exec(query, args...); err != nil {
