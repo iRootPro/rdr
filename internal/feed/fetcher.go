@@ -13,7 +13,10 @@ import (
 	"github.com/iRootPro/rdr/internal/db"
 )
 
-const userAgent = "rdr/0.1 (+https://github.com/iRootPro/rdr)"
+const (
+	userAgent            = "rdr/0.1 (+https://github.com/iRootPro/rdr)"
+	maxConcurrentFetches = 8
+)
 
 type FetchResult struct {
 	Feed    db.Feed
@@ -25,14 +28,12 @@ type FetchResult struct {
 type Fetcher struct {
 	db     *db.DB
 	client *http.Client
-	parser *gofeed.Parser
 }
 
 func New(d *db.DB) *Fetcher {
 	return &Fetcher{
 		db:     d,
 		client: &http.Client{Timeout: 15 * time.Second},
-		parser: gofeed.NewParser(),
 	}
 }
 
@@ -43,7 +44,9 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 	}
 	defer body.Close()
 
-	parsed, err := f.parser.Parse(body)
+	// gofeed.Parser lazy-inits shared fields on Parse, so it is not safe for
+	// concurrent use. Constructing a fresh parser per call sidesteps the race.
+	parsed, err := gofeed.NewParser().Parse(body)
 	if err != nil {
 		return FetchResult{}, fmt.Errorf("parse feed: %w", err)
 	}
@@ -71,10 +74,9 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]FetchResult, error) {
 	}
 	results := make([]FetchResult, len(feeds))
 	g, gctx := errgroup.WithContext(ctx)
-	sem := make(chan struct{}, 8)
+	sem := make(chan struct{}, maxConcurrentFetches)
 
 	for i, feed := range feeds {
-		i, feed := i, feed
 		g.Go(func() error {
 			select {
 			case sem <- struct{}{}:
@@ -93,7 +95,7 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]FetchResult, error) {
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return results, err
+		return nil, err
 	}
 	return results, nil
 }
