@@ -374,6 +374,28 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settingsInput.SetValue("")
 		m.settingsInput.Focus()
 		return m, textinput.Blink
+	case msg.String() == "d":
+		if len(m.feeds) == 0 {
+			return m, nil
+		}
+		id := m.feeds[m.settingsSel].ID
+		if err := m.db.DeleteFeed(id); err != nil {
+			m.err = err
+			return m, nil
+		}
+		if m.settingsSel > 0 {
+			m.settingsSel--
+		}
+		return m, loadFeedsCmd(m.db)
+	case msg.String() == "e":
+		if len(m.feeds) == 0 {
+			return m, nil
+		}
+		m.settingsMode = smRename
+		m.settingsInput.SetValue(m.feeds[m.settingsSel].Name)
+		m.settingsInput.CursorEnd()
+		m.settingsInput.Focus()
+		return m, textinput.Blink
 	}
 	return m, nil
 }
@@ -395,6 +417,19 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.pendingName = ""
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, loadFeedsCmd(m.db)
+	case smRename:
+		if len(m.feeds) == 0 {
+			return m, nil
+		}
+		id := m.feeds[m.settingsSel].ID
+		if err := m.db.RenameFeed(id, value); err != nil {
+			m.err = err
+			return m, nil
+		}
 		m.settingsMode = smList
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
