@@ -73,3 +73,72 @@ func TestFetchOne_AtomHappyPath(t *testing.T) {
 		t.Fatalf("articles[0].URL: got %q", articles[0].URL)
 	}
 }
+
+func TestFetchOne_IsIdempotent(t *testing.T) {
+	d := openTestDB(t)
+	srv := serveFixture(t, "atom_feed.xml")
+	defer srv.Close()
+	feed, _ := d.UpsertFeed("Example", srv.URL)
+
+	f := New(d)
+	if _, err := f.FetchOne(context.Background(), feed); err != nil {
+		t.Fatalf("first fetch: %v", err)
+	}
+	result, err := f.FetchOne(context.Background(), feed)
+	if err != nil {
+		t.Fatalf("second fetch: %v", err)
+	}
+	if result.Added != 0 {
+		t.Fatalf("Added on rerun: got %d, want 0", result.Added)
+	}
+	if result.Updated != 3 {
+		t.Fatalf("Updated on rerun: got %d, want 3", result.Updated)
+	}
+}
+
+func TestFetchOne_MalformedXMLReturnsError(t *testing.T) {
+	d := openTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<not xml at all"))
+	}))
+	defer srv.Close()
+	feed, _ := d.UpsertFeed("Bad", srv.URL)
+
+	f := New(d)
+	if _, err := f.FetchOne(context.Background(), feed); err == nil {
+		t.Fatal("expected parse error, got nil")
+	}
+}
+
+func TestFetchOne_HTTP500ReturnsError(t *testing.T) {
+	d := openTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	feed, _ := d.UpsertFeed("Boom", srv.URL)
+
+	f := New(d)
+	if _, err := f.FetchOne(context.Background(), feed); err == nil {
+		t.Fatal("expected http error, got nil")
+	}
+}
+
+func TestFetchOne_EmptyTitleUsesFallback(t *testing.T) {
+	d := openTestDB(t)
+	srv := serveFixture(t, "notitle_feed.xml")
+	defer srv.Close()
+	feed, _ := d.UpsertFeed("NoTitle", srv.URL)
+
+	f := New(d)
+	if _, err := f.FetchOne(context.Background(), feed); err != nil {
+		t.Fatalf("FetchOne: %v", err)
+	}
+	articles, _ := d.ListArticles(feed.ID, 10)
+	if len(articles) != 1 {
+		t.Fatalf("articles: got %d, want 1", len(articles))
+	}
+	if articles[0].Title != "(без заголовка)" {
+		t.Fatalf("title fallback: got %q", articles[0].Title)
+	}
+}

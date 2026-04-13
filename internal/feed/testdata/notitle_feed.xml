@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>NoTitle Feed</title>
+  <link href="http://example.org/"/>
+  <updated>2026-04-13T12:00:00Z</updated>
+  <id>urn:uuid:notitle</id>
+  <entry>
+    <link href="http://example.org/notitle/1"/>
+    <id>urn:uuid:notitle-1</id>
+    <updated>2026-04-13T11:00:00Z</updated>
+    <published>2026-04-13T11:00:00Z</published>
+    <summary>An entry without a title element</summary>
+  </entry>
+</feed>
