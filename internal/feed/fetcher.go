@@ -65,6 +65,8 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 			result.Updated++
 		}
 	}
+	// Trim failure is fatal for now — there's no logger wired up, and silent
+	// swallow is worse than propagating. Revisit once Fetcher has warnings.
 	if err := f.db.TrimArticles(feed.ID, f.maxArticlesPerFeed()); err != nil {
 		return FetchResult{}, fmt.Errorf("trim: %w", err)
 	}
