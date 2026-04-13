@@ -2,8 +2,10 @@ package ui
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -32,21 +34,33 @@ type Model struct {
 	width  int
 	height int
 
+	spin     spinner.Model
+	fetching bool
+
 	status string
 	err    error
 }
 
 func New(database *db.DB, fetcher *feed.Fetcher) Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(colorAccent)
 	return Model{
-		db:      database,
-		fetcher: fetcher,
-		keys:    defaultKeys(),
-		status:  "loading…",
+		db:       database,
+		fetcher:  fetcher,
+		keys:     defaultKeys(),
+		status:   "fetching…",
+		spin:     s,
+		fetching: true,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return loadFeedsCmd(m.db)
+	return tea.Batch(
+		loadFeedsCmd(m.db),
+		fetchAllCmd(m.fetcher),
+		m.spin.Tick,
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -71,11 +85,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.moveDown()
 		case key.Matches(msg, m.keys.Up):
 			return m.moveUp()
+		case key.Matches(msg, m.keys.RefreshAll), key.Matches(msg, m.keys.RefreshOne):
+			if m.fetching {
+				return m, nil
+			}
+			m.fetching = true
+			m.status = "fetching…"
+			return m, tea.Batch(fetchAllCmd(m.fetcher), m.spin.Tick)
 		}
+
+	case spinner.TickMsg:
+		if !m.fetching {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
+
+	case fetchDoneMsg:
+		m.fetching = false
+		var failed int
+		for _, r := range msg.results {
+			if r.Err != nil {
+				failed++
+			}
+		}
+		if failed > 0 {
+			m.status = fmt.Sprintf("fetched · %d error(s)", failed)
+		} else {
+			m.status = "fetched"
+		}
+		cmds := []tea.Cmd{loadFeedsCmd(m.db)}
+		if len(m.feeds) > 0 {
+			cmds = append(cmds, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID))
+		}
+		return m, tea.Batch(cmds...)
 
 	case feedsLoadedMsg:
 		m.feeds = msg.feeds
-		m.status = "ready"
+		if !m.fetching {
+			m.status = "ready"
+		}
 		if len(m.feeds) > 0 {
 			if m.selFeed >= len(m.feeds) {
 				m.selFeed = 0
@@ -150,7 +200,12 @@ func (m Model) View() string {
 	right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH)
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-	status := statusBar.Width(m.width).Render("rdr · " + m.status)
+
+	statusText := "rdr · " + m.status
+	if m.fetching {
+		statusText = "rdr · " + m.spin.View() + " " + m.status
+	}
+	status := statusBar.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Top, row, status)
 }
