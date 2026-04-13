@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
@@ -76,7 +77,21 @@ func (m Model) View() string {
 	if m.err != nil {
 		return errStyle.Render("error: "+m.err.Error()) + "\n"
 	}
-	return "rdr — " + m.status + "\n"
+	if m.width == 0 || m.height == 0 {
+		return "rdr — " + m.status
+	}
+
+	leftW := m.width/3 - 2
+	if leftW < 10 {
+		leftW = 10
+	}
+	paneH := m.height - 2
+
+	left := renderFeedList(m.feeds, m.selFeed, m.focus == focusFeeds, leftW, paneH)
+
+	status := statusBar.Width(m.width).Render("rdr · " + m.status)
+
+	return lipgloss.JoinVertical(lipgloss.Top, left, status)
 }
 
 func loadFeedsCmd(d *db.DB) tea.Cmd {
