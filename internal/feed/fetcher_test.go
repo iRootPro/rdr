@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/iRootPro/rdr/internal/db"
 )
@@ -231,5 +232,67 @@ func TestFetchAll_ContextCancelSurfaces(t *testing.T) {
 	}
 	if len(results) == 0 || results[0].Err == nil {
 		t.Fatalf("expected cancellation to surface, got clean results %+v", results)
+	}
+}
+
+func TestFetchOne_TrimsReadArticlesToSettingCap(t *testing.T) {
+	d := openTestDB(t)
+	// cap=4: after fetch we have 3 unread + 3 seeded read = 6 total,
+	// TrimArticles deletes (6-4)=2 oldest read rows, leaving 3 unread + 1 read.
+	if err := d.SetSetting("max_articles_per_feed", "4"); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	srv := serveFixture(t, "atom_feed.xml")
+	defer srv.Close()
+	feed, err := d.UpsertFeed("Example", srv.URL)
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
+
+	base := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 3; i++ {
+		a := db.Article{
+			FeedID:      feed.ID,
+			Title:       "old",
+			URL:         "https://old.example/" + string(rune('a'+i)),
+			PublishedAt: base.Add(time.Duration(i) * time.Hour),
+		}
+		if _, err := d.UpsertArticle(a); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	all, err := d.ListArticles(feed.ID, 100)
+	if err != nil {
+		t.Fatalf("ListArticles seed: %v", err)
+	}
+	for _, a := range all {
+		if err := d.MarkRead(a.ID); err != nil {
+			t.Fatalf("MarkRead: %v", err)
+		}
+	}
+
+	f := New(d)
+	if _, err := f.FetchOne(context.Background(), feed); err != nil {
+		t.Fatalf("FetchOne: %v", err)
+	}
+
+	all, err = d.ListArticles(feed.ID, 100)
+	if err != nil {
+		t.Fatalf("ListArticles after fetch: %v", err)
+	}
+	var unread, read int
+	for _, a := range all {
+		if a.ReadAt == nil {
+			unread++
+		} else {
+			read++
+		}
+	}
+	if unread != 3 {
+		t.Fatalf("unread: got %d, want 3", unread)
+	}
+	if read != 1 {
+		t.Fatalf("read: got %d, want 1 (oldest 2 of 3 reads trimmed)", read)
 	}
 }

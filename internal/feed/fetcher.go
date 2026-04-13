@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/mmcdole/gofeed"
@@ -64,7 +65,23 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 			result.Updated++
 		}
 	}
+	if err := f.db.TrimArticles(feed.ID, f.maxArticlesPerFeed()); err != nil {
+		return FetchResult{}, fmt.Errorf("trim: %w", err)
+	}
 	return result, nil
+}
+
+func (f *Fetcher) maxArticlesPerFeed() int {
+	const fallback = 50
+	v, err := f.db.GetSetting("max_articles_per_feed")
+	if err != nil || v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 func (f *Fetcher) FetchAll(ctx context.Context) ([]FetchResult, error) {
