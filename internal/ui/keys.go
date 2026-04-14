@@ -30,6 +30,8 @@ type keyMap struct {
 	Zen           key.Binding
 	Command       key.Binding
 	Star          key.Binding
+	NextArticle   key.Binding
+	PrevArticle   key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -61,6 +63,8 @@ func defaultKeys() keyMap {
 		Zen:           key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zen")),
 		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "command")),
 		Star:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "toggle star")),
+		NextArticle:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next article")),
+		PrevArticle:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev article")),
 	}
 }
 
@@ -72,7 +76,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown},
 		{k.Left, k.Right, k.Tab, k.Enter, k.Back},
-		{k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle, k.Star},
+		{k.NextArticle, k.PrevArticle, k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle, k.Star},
 		{k.FilterAll, k.FilterUnread, k.FilterStarred, k.NextUnread, k.Zen},
 		{k.Search, k.Command, k.Help, k.Settings, k.Quit},
 	}
