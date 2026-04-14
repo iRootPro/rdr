@@ -32,6 +32,7 @@ type keyMap struct {
 	Star          key.Binding
 	NextArticle   key.Binding
 	PrevArticle   key.Binding
+	LinkPicker    key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -65,6 +66,7 @@ func defaultKeys() keyMap {
 		Star:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "toggle star")),
 		NextArticle:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next article")),
 		PrevArticle:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev article")),
+		LinkPicker:    key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "links")),
 	}
 }
 
