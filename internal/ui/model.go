@@ -53,6 +53,7 @@ const (
 	focusSettings
 	focusSearch
 	focusCommand
+	focusLinks
 )
 
 type settingsMode int
@@ -133,6 +134,10 @@ type Model struct {
 	afterSyncCommands []string
 	refreshInterval   time.Duration
 	home              string
+
+	// Link picker overlay (reader → press L to open).
+	links    []articleLink
+	linksSel int
 
 	commandInput   textinput.Model
 	commandPrev    focus
@@ -250,6 +255,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == focusCommand {
 			return m.updateCommand(msg)
 		}
+		if m.focus == focusLinks {
+			return m.updateLinks(msg)
+		}
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
@@ -343,6 +351,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusArticles
 			} else {
 				m.focus = focusFeeds
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.LinkPicker):
+			if m.focus == focusReader {
+				return m.openLinkPickerOnCurrent()
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.NextArticle):
@@ -903,6 +916,16 @@ func (m Model) View() string {
 	if m.focus == focusSearch {
 		body := renderSearch(m, m.width, m.height-1-helpH)
 		statusText := "rdr · search"
+		if m.err != nil {
+			statusText += "  " + errStyle.Render("! "+m.err.Error())
+		}
+		status := statusBar.Width(m.width).Render(statusText)
+		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+	}
+
+	if m.focus == focusLinks {
+		body := renderLinkPicker(m, m.width, m.height-1-helpH)
+		statusText := "rdr · links"
 		if m.err != nil {
 			statusText += "  " + errStyle.Render("! "+m.err.Error())
 		}
