@@ -10,12 +10,22 @@ import (
 )
 
 type Config struct {
-	Feeds []FeedEntry `yaml:"feeds"`
+	Feeds             []FeedEntry   `yaml:"feeds"`
+	SmartFolders      []SmartFolder `yaml:"smart_folders,omitempty"`
+	AfterSyncCommands []string      `yaml:"after_sync_commands,omitempty"`
 }
 
 type FeedEntry struct {
 	Name string `yaml:"name"`
 	URL  string `yaml:"url"`
+}
+
+// SmartFolder is a saved query that appears as a virtual folder in the feed
+// list. Selecting it loads articles from across all feeds filtered by Query
+// (using the rdr query language, see internal/ui/query.go).
+type SmartFolder struct {
+	Name  string `yaml:"name"`
+	Query string `yaml:"query"`
 }
 
 // Load reads <home>/config.yaml. A missing file yields an empty Config

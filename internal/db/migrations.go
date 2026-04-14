@@ -41,4 +41,9 @@ var migrations = []string{
 		('max_articles_per_feed', '50'),
 		('theme',                 'dark');
 	`,
+	// 002: article starring
+	`
+	ALTER TABLE articles ADD COLUMN starred_at DATETIME;
+	CREATE INDEX idx_articles_starred_at ON articles(starred_at) WHERE starred_at IS NOT NULL;
+	`,
 }

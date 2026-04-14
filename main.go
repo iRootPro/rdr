@@ -35,7 +35,7 @@ func main() {
 	}
 
 	fetcher := feed.New(database)
-	program := tea.NewProgram(ui.New(database, fetcher), tea.WithAltScreen())
+	program := tea.NewProgram(ui.New(database, fetcher, cfg.SmartFolders, cfg.AfterSyncCommands), tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "run:", err)
 		os.Exit(1)

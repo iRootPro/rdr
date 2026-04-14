@@ -62,7 +62,7 @@ func TestOpen_IsIdempotent(t *testing.T) {
 	).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected 1 migration row, got %d", count)
+	if count != len(migrations) {
+		t.Fatalf("expected %d migration rows, got %d", len(migrations), count)
 	}
 }

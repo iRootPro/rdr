@@ -5,26 +5,66 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/iRootPro/rdr/internal/db"
 )
 
-func renderFeedList(feeds []db.Feed, errors map[int64]error, selected int, active bool, width, height int) string {
+// renderFeedList draws the unified feeds pane: smart folders at the top with
+// an icon prefix, then a subtle separator, then regular feeds with unread
+// counters. Selection highlights the currently active row.
+func renderFeedList(entries []feedEntry, selected int, active bool, width, height int) string {
 	var b strings.Builder
 	b.WriteString(paneTitle.Render("Feeds"))
 	b.WriteString("\n")
 
-	if len(feeds) == 0 {
+	if len(entries) == 0 {
 		b.WriteString(readStyle.Render("(no feeds)"))
 		return framePane(b.String(), active, width, height)
 	}
 
-	nameW := width - 10
-	if nameW < 1 {
-		nameW = 1
+	// Inner text area after pane border (2) + padding (2) = width - 4.
+	inner := width - 4
+	if inner < 1 {
+		inner = 1
 	}
 
-	for i, f := range feeds {
+	// Reserve a fixed column for the counter based on both folder match
+	// counts and feed unread counts. +1 gap between name and counter.
+	counterW := maxEntryCounterWidth(entries)
+	counterCol := 0
+	if counterW > 0 {
+		counterCol = counterW + 1
+	}
+	nameCellW := inner - counterCol
+	if nameCellW < 1 {
+		nameCellW = 1
+	}
+
+	// Find the first feed entry index so we can insert a visual separator
+	// between folders and feeds. -1 means no feeds (don't render separator)
+	// or no folders (also skip).
+	firstFeedIdx := -1
+	hasFolder := false
+	for i, e := range entries {
+		if e.Kind == entryFolder {
+			hasFolder = true
+		}
+		if e.Kind == entryFeed && firstFeedIdx < 0 {
+			firstFeedIdx = i
+		}
+	}
+	showSeparator := hasFolder && firstFeedIdx > 0
+
+	start, end := visibleWindow(len(entries), selected, listVisibleRows(height))
+	for i := start; i < end; i++ {
+		e := entries[i]
+
+		if showSeparator && i == firstFeedIdx {
+			sep := lipgloss.NewStyle().
+				Foreground(colorBorder).
+				Render(strings.Repeat("─", nameCellW+counterCol))
+			b.WriteString(sep)
+			b.WriteString("\n")
+		}
+
 		prefix := "  "
 		nameStyle := lipgloss.NewStyle()
 		if i == selected {
@@ -36,27 +76,84 @@ func renderFeedList(feeds []db.Feed, errors map[int64]error, selected int, activ
 			}
 		}
 
-		errMark := ""
-		if _, ok := errors[f.ID]; ok {
-			errMark = errStyle.Render("● ")
+		var icon string
+		iconCells := 0
+		switch e.Kind {
+		case entryFolder:
+			icon = lipgloss.NewStyle().Foreground(colorTeal).Render("◉ ")
+			iconCells = 2
+		case entryFeed:
+			if e.HasError {
+				icon = errStyle.Render("● ")
+				iconCells = 2
+			}
 		}
 
-		name := nameStyle.Render(prefix + errMark + truncate(f.Name, nameW))
+		// prefix always 2 visible cells.
+		nameBudget := nameCellW - 2 - iconCells
+		if nameBudget < 1 {
+			nameBudget = 1
+		}
+		name := nameStyle.Render(prefix + icon + truncate(e.Name, nameBudget))
+
 		counter := ""
-		if f.UnreadCount > 0 {
-			counter = counterStyle.Render(fmt.Sprintf("%d", f.UnreadCount))
+		if e.UnreadCount > 0 {
+			counter = counterStyle.Render(fmt.Sprintf("%d", e.UnreadCount))
 		}
 
-		line := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			lipgloss.NewStyle().Width(width-4).Render(name),
-			counter,
-		)
+		nameCell := lipgloss.NewStyle().Width(nameCellW).Render(name)
+		counterCell := lipgloss.NewStyle().
+			Width(counterCol).
+			Align(lipgloss.Right).
+			Render(counter)
+
+		line := lipgloss.JoinHorizontal(lipgloss.Top, nameCell, counterCell)
 		b.WriteString(line)
-		b.WriteString("\n")
+		if i < end-1 {
+			b.WriteString("\n")
+		}
 	}
 
 	return framePane(b.String(), active, width, height)
+}
+
+func maxEntryCounterWidth(entries []feedEntry) int {
+	w := 0
+	for _, e := range entries {
+		if e.UnreadCount <= 0 {
+			continue
+		}
+		d := len(fmt.Sprintf("%d", e.UnreadCount))
+		if d > w {
+			w = d
+		}
+	}
+	return w
+}
+
+func listVisibleRows(paneHeight int) int {
+	// Pane border (2) + title row (1) + padding-below-title (1) = 4 rows overhead.
+	n := paneHeight - 4
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+func visibleWindow(total, selected, maxVisible int) (start, end int) {
+	if total <= maxVisible {
+		return 0, total
+	}
+	start = selected - maxVisible/2
+	if start < 0 {
+		start = 0
+	}
+	end = start + maxVisible
+	if end > total {
+		end = total
+		start = end - maxVisible
+	}
+	return start, end
 }
 
 func framePane(content string, active bool, width, height int) string {

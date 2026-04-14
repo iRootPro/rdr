@@ -14,9 +14,35 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/iRootPro/rdr/internal/config"
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
 )
+
+// entryKind tags a row in the unified feed list: smart folder or plain feed.
+type entryKind int
+
+const (
+	entryFolder entryKind = iota
+	entryFeed
+)
+
+// feedEntry is a single row in the Feeds pane. It may be either a smart
+// folder (virtual, query-backed) or a regular feed pulled from the DB.
+type feedEntry struct {
+	Kind entryKind
+
+	// Feed-only:
+	FeedID      int64
+	UnreadCount int
+	HasError    bool
+
+	// Folder-only:
+	FolderIdx int // index into m.smartFolders
+
+	// Shared:
+	Name string
+}
 
 type focus int
 
@@ -25,6 +51,8 @@ const (
 	focusArticles
 	focusReader
 	focusSettings
+	focusSearch
+	focusCommand
 )
 
 type settingsMode int
@@ -36,16 +64,41 @@ const (
 	smRename
 )
 
+type articleFilter = db.ArticleFilter
+
+const (
+	filterAll     = db.FilterAll
+	filterUnread  = db.FilterUnread
+	filterStarred = db.FilterStarred
+)
+
+func filterLabel(f articleFilter) string {
+	switch f {
+	case filterUnread:
+		return "unread"
+	case filterStarred:
+		return "starred"
+	default:
+		return "all"
+	}
+}
+
 type Model struct {
 	db      *db.DB
 	fetcher *feed.Fetcher
 	keys    keyMap
 
-	feeds    []db.Feed
-	articles []db.Article
-	selFeed  int
-	selArt   int
-	focus    focus
+	feeds        []db.Feed
+	smartFolders []config.SmartFolder
+	articles     []db.Article
+	selEntry     int
+	selArt       int
+	focus        focus
+
+	// allArticles is a cached cross-feed snapshot used to compute smart
+	// folder match counts without hitting the DB on every keystroke.
+	allArticles  []db.Article
+	folderCounts []int
 
 	width  int
 	height int
@@ -66,11 +119,38 @@ type Model struct {
 	settingsInput textinput.Model
 	pendingName   string
 
+	searchInput   textinput.Model
+	searchAll     []db.SearchItem
+	searchMatches []int
+	searchSel     int
+	searchScroll  int
+	searchPrev    focus
+	searchErr     error
+
+	filter            articleFilter
+	zenMode           bool
+	afterSyncCommands []string
+
+	commandInput   textinput.Model
+	commandPrev    focus
+	commandSuggIdx int
+
+	// Command history (vim-style :<prev command>). historyPos: -1 = not
+	// browsing, else index into commandHistory (0 = most recent). When the
+	// user starts browsing we stash the partial input in historyStash so
+	// Ctrl+N can restore it.
+	commandHistory []string
+	historyPos     int
+	historyStash   string
+
+	sortField   string // "date" or "title"
+	sortReverse bool
+
 	status string
 	err    error
 }
 
-func New(database *db.DB, fetcher *feed.Fetcher) Model {
+func New(database *db.DB, fetcher *feed.Fetcher, smartFolders []config.SmartFolder, afterSyncCommands []string) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(colorAccent)
@@ -86,6 +166,16 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 	ti.Prompt = "› "
 	ti.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent)
 
+	si := textinput.New()
+	si.CharLimit = 128
+	si.Prompt = "› "
+	si.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent)
+
+	ci := textinput.New()
+	ci.CharLimit = 128
+	ci.Prompt = ":"
+	ci.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent)
+
 	return Model{
 		db:       database,
 		fetcher:  fetcher,
@@ -95,14 +185,21 @@ func New(database *db.DB, fetcher *feed.Fetcher) Model {
 		fetching: true,
 		reader:        viewport.New(0, 0),
 		help:          h,
-		feedErrors:    map[int64]error{},
-		settingsInput: ti,
+		feedErrors:        map[int64]error{},
+		smartFolders:      smartFolders,
+		afterSyncCommands: afterSyncCommands,
+		settingsInput:     ti,
+		searchInput:   si,
+		commandInput:  ci,
+		historyPos:    -1,
+		sortField:     "date",
 	}
 }
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadFeedsCmd(m.db),
+		loadAllArticlesCmd(m.db),
 		fetchAllCmd(m.fetcher),
 		m.spin.Tick,
 	)
@@ -125,6 +222,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == focusSettings {
 			return m.updateSettings(msg)
 		}
+		if m.focus == focusSearch {
+			return m.updateSearch(msg)
+		}
+		if m.focus == focusCommand {
+			return m.updateCommand(msg)
+		}
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
@@ -133,6 +236,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsMode = smList
 			m.settingsSel = 0
 			return m, nil
+		case key.Matches(msg, m.keys.Search):
+			m.searchPrev = m.focus
+			m.focus = focusSearch
+			m.searchInput.SetValue("")
+			m.searchInput.Focus()
+			m.searchSel = 0
+			return m, tea.Batch(loadSearchCmd(m.db), textinput.Blink)
+		case key.Matches(msg, m.keys.Zen):
+			m.zenMode = !m.zenMode
+			return m, nil
+		case key.Matches(msg, m.keys.FilterAll):
+			if m.filter != filterAll {
+				m.filter = filterAll
+				m.selArt = 0
+				if len(m.feeds) > 0 {
+					return m, m.loadCurrentCmd()
+				}
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.FilterUnread):
+			if m.filter != filterUnread {
+				m.filter = filterUnread
+				m.selArt = 0
+				if len(m.feeds) > 0 {
+					return m, m.loadCurrentCmd()
+				}
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.FilterStarred):
+			if m.filter != filterStarred {
+				m.filter = filterStarred
+				m.selArt = 0
+				if len(m.feeds) > 0 {
+					return m, m.loadCurrentCmd()
+				}
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.Star):
+			return m.toggleStarOnCurrent()
+		case key.Matches(msg, m.keys.NextUnread):
+			return m.jumpToNextUnread()
+		case key.Matches(msg, m.keys.Command):
+			m.commandPrev = m.focus
+			m.focus = focusCommand
+			m.commandInput.SetValue("")
+			m.commandInput.Focus()
+			m.commandSuggIdx = 0
+			return m, textinput.Blink
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = !m.showHelp
 			m.help.ShowAll = m.showHelp
@@ -208,7 +359,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.readerArt = nil
 				cmds := []tea.Cmd{loadFeedsCmd(m.db)}
 				if len(m.feeds) > 0 {
-					cmds = append(cmds, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID))
+					cmds = append(cmds, m.loadCurrentCmd())
 				}
 				return m, tea.Batch(cmds...)
 			}
@@ -271,9 +422,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status = "fetched"
 		}
-		cmds := []tea.Cmd{loadFeedsCmd(m.db)}
+		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
 		if len(m.feeds) > 0 {
-			cmds = append(cmds, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID))
+			cmds = append(cmds, m.loadCurrentCmd())
+		}
+		// Fire any configured after_sync_commands. Each runs through the
+		// same dispatchCommand path as user-typed :commands, so behavior
+		// stays consistent. Errors from parse/dispatch surface via m.err.
+		for _, line := range m.afterSyncCommands {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			nm, cmd := dispatchCommand(m, trimmed)
+			m = nm.(Model)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 		return m, tea.Batch(cmds...)
 
@@ -283,26 +448,68 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.fetching {
 			m.status = "ready"
 		}
-		if len(m.feeds) > 0 {
-			if m.selFeed >= len(m.feeds) {
-				m.selFeed = 0
+		total := len(m.entries())
+		if total > 0 {
+			if m.selEntry >= total {
+				m.selEntry = 0
 			}
-			return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+			return m, m.loadCurrentCmd()
 		}
 		return m, nil
 
 	case articlesLoadedMsg:
 		m.err = nil
-		if len(m.feeds) > 0 && m.feeds[m.selFeed].ID == msg.feedID {
+		e, ok := m.currentEntry()
+		if ok && e.Kind == entryFeed && e.FeedID == msg.feedID {
 			m.articles = msg.articles
+			applySort(m.articles, m.sortField, m.sortReverse)
 			if m.selArt >= len(m.articles) {
 				m.selArt = 0
 			}
 		}
 		return m, nil
 
+	case folderArticlesLoadedMsg:
+		m.err = nil
+		e, ok := m.currentEntry()
+		if ok && e.Kind == entryFolder && e.FolderIdx == msg.folderIdx {
+			m.articles = msg.articles
+			applySort(m.articles, m.sortField, m.sortReverse)
+			if m.selArt >= len(m.articles) {
+				m.selArt = 0
+			}
+		}
+		return m, nil
+
+	case allArticlesLoadedMsg:
+		m.err = nil
+		m.allArticles = msg.articles
+		m.refreshFolderCounts()
+		return m, nil
+
+	case batchAppliedMsg:
+		m.err = nil
+		m.status = fmt.Sprintf("%s · %d articles", msg.action, msg.count)
+		// Refresh feed list (unread counts), current selection's article
+		// list, and the cross-feed cache for folder counts.
+		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
+		if c := m.loadCurrentCmd(); c != nil {
+			cmds = append(cmds, c)
+		}
+		return m, tea.Batch(cmds...)
+
 	case articleMarkedMsg:
 		m.err = nil
+		// Update cached article so folder counts reflect the new read state
+		// without a full DB round-trip.
+		now := time.Now().UTC()
+		for i := range m.allArticles {
+			if m.allArticles[i].ID == msg.articleID && m.allArticles[i].ReadAt == nil {
+				m.allArticles[i].ReadAt = &now
+				break
+			}
+		}
+		m.refreshFolderCounts()
 		return m, nil
 
 	case fullArticleLoadedMsg:
@@ -315,6 +522,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4))
 			m.reader.GotoTop()
+		}
+		return m, nil
+
+	case searchLoadedMsg:
+		m.searchAll = msg.items
+		m.searchSel = 0
+		m.searchScroll = 0
+		recomputeMatches(&m)
+		clampSearchScroll(&m)
+		return m, nil
+
+	case starToggledMsg:
+		m.err = nil
+		// Update local article state so the UI reflects the change without reload.
+		for i := range m.articles {
+			if m.articles[i].ID == msg.articleID {
+				if msg.starred {
+					t := time.Now().UTC()
+					m.articles[i].StarredAt = &t
+				} else {
+					m.articles[i].StarredAt = nil
+				}
+				break
+			}
+		}
+		if m.readerArt != nil && m.readerArt.ID == msg.articleID {
+			if msg.starred {
+				t := time.Now().UTC()
+				m.readerArt.StarredAt = &t
+			} else {
+				m.readerArt.StarredAt = nil
+			}
+		}
+		// Update cached article for folder-count freshness.
+		for i := range m.allArticles {
+			if m.allArticles[i].ID == msg.articleID {
+				if msg.starred {
+					t := time.Now().UTC()
+					m.allArticles[i].StarredAt = &t
+				} else {
+					m.allArticles[i].StarredAt = nil
+				}
+				break
+			}
+		}
+		m.refreshFolderCounts()
+		if msg.starred {
+			m.status = "starred"
+		} else {
+			m.status = "unstarred"
+		}
+		// If viewing the starred filter and we just unstarred, reload so the
+		// row falls out of the list.
+		if m.filter == filterStarred && !msg.starred && len(m.feeds) > 0 {
+			return m, m.loadCurrentCmd()
 		}
 		return m, nil
 
@@ -456,9 +718,9 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 func (m Model) moveDown() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusFeeds:
-		if m.selFeed < len(m.feeds)-1 {
-			m.selFeed++
-			return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+		if m.selEntry < len(m.entries())-1 {
+			m.selEntry++
+			return m, m.loadCurrentCmd()
 		}
 	case focusArticles:
 		if m.selArt < len(m.articles)-1 {
@@ -471,9 +733,9 @@ func (m Model) moveDown() (tea.Model, tea.Cmd) {
 func (m Model) moveUp() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusFeeds:
-		if m.selFeed > 0 {
-			m.selFeed--
-			return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+		if m.selEntry > 0 {
+			m.selEntry--
+			return m, m.loadCurrentCmd()
 		}
 	case focusArticles:
 		if m.selArt > 0 {
@@ -486,11 +748,11 @@ func (m Model) moveUp() (tea.Model, tea.Cmd) {
 func (m Model) moveTo(idx int) (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusFeeds:
-		if idx < 0 || idx >= len(m.feeds) {
+		if idx < 0 || idx >= len(m.entries()) {
 			return m, nil
 		}
-		m.selFeed = idx
-		return m, loadArticlesCmd(m.db, m.feeds[m.selFeed].ID)
+		m.selEntry = idx
+		return m, m.loadCurrentCmd()
 	case focusArticles:
 		if idx < 0 || idx >= len(m.articles) {
 			return m, nil
@@ -503,7 +765,7 @@ func (m Model) moveTo(idx int) (tea.Model, tea.Cmd) {
 func (m Model) moveToEnd() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case focusFeeds:
-		return m.moveTo(len(m.feeds) - 1)
+		return m.moveTo(len(m.entries()) - 1)
 	case focusArticles:
 		return m.moveTo(len(m.articles) - 1)
 	}
@@ -517,7 +779,7 @@ func (m Model) moveByPage(dir int) (tea.Model, tea.Cmd) {
 	}
 	switch m.focus {
 	case focusFeeds:
-		return m.moveTo(clamp(m.selFeed+dir*step, 0, len(m.feeds)-1))
+		return m.moveTo(clamp(m.selEntry+dir*step, 0, len(m.entries())-1))
 	case focusArticles:
 		return m.moveTo(clamp(m.selArt+dir*step, 0, len(m.articles)-1))
 	}
@@ -562,6 +824,16 @@ func (m Model) View() string {
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
+	if m.focus == focusSearch {
+		body := renderSearch(m, m.width, m.height-1-helpH)
+		statusText := "rdr · search"
+		if m.err != nil {
+			statusText += "  " + errStyle.Render("! "+m.err.Error())
+		}
+		status := statusBar.Width(m.width).Render(statusText)
+		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+	}
+
 	if m.focus == focusReader && m.readerArt != nil {
 		statusText := "rdr · reader"
 		if m.err != nil {
@@ -573,31 +845,233 @@ func (m Model) View() string {
 		return frame
 	}
 
-	leftW := m.width/3 - 2
-	if leftW < 10 {
-		leftW = 10
+	// In command mode, reserve vertical space for the suggestions popup so it
+	// doesn't overlap with the main panes.
+	popup := ""
+	popupH := 0
+	if m.focus == focusCommand {
+		popup = renderCommandPopup(m, m.width)
+		if popup != "" {
+			popupH = lipgloss.Height(popup)
+		}
 	}
-	rightW := m.width - leftW - 4
-	if rightW < 10 {
-		rightW = 10
-	}
-	paneH := m.height - 2 - helpH
 
-	left := renderFeedList(m.feeds, m.feedErrors, m.selFeed, m.focus == focusFeeds, leftW, paneH)
-	right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH)
+	paneH := m.height - 2 - helpH - popupH
 
-	row := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	var row string
+	if m.zenMode {
+		// Only the focused pane is drawn at full width.
+		fullW := m.width - 2
+		if fullW < 10 {
+			fullW = 10
+		}
+		entries := m.entries()
+		if m.focus == focusFeeds {
+			row = renderFeedList(entries, m.selEntry, true, fullW, paneH)
+		} else {
+			row = renderArticleList(m.articles, m.selArt, true, fullW, paneH)
+		}
+	} else {
+		leftW := m.width/3 - 2
+		if leftW < 10 {
+			leftW = 10
+		}
+		rightW := m.width - leftW - 4
+		if rightW < 10 {
+			rightW = 10
+		}
+		entries := m.entries()
+		left := renderFeedList(entries, m.selEntry, m.focus == focusFeeds, leftW, paneH)
+		right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH)
+		row = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	}
 
-	statusText := "rdr · " + m.status
-	if m.fetching {
-		statusText = "rdr · " + m.spin.View() + " " + m.status
+	if m.focus == focusCommand {
+		cmdLine := statusBar.Width(m.width).Render(m.commandInput.View())
+		return lipgloss.JoinVertical(lipgloss.Top, row, popup, cmdLine, helpView)
 	}
-	if m.err != nil {
-		statusText += "  " + errStyle.Render("! "+m.err.Error())
+
+	var status string
+	{
+		statusText := "rdr · " + m.status
+		if m.fetching {
+			statusText = "rdr · " + m.spin.View() + " " + m.status
+		}
+		statusText += "  " + searchCount.Render("["+filterLabel(m.filter)+"]")
+		if m.sortField != "date" || m.sortReverse {
+			dir := "↓"
+			if m.sortReverse {
+				dir = "↑"
+			}
+			statusText += " " + searchCount.Render("[sort:"+m.sortField+dir+"]")
+		}
+		if m.zenMode {
+			statusText += " " + searchCount.Render("[zen]")
+		}
+		if m.err != nil {
+			statusText += "  " + errStyle.Render("! "+m.err.Error())
+		}
+		status = statusBar.Width(m.width).Render(statusText)
 	}
-	status := statusBar.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Top, row, status, helpView)
+}
+
+// toggleStarOnCurrent toggles the starred flag for the article under the
+// cursor (in articles list) or the one being read (in reader focus).
+func (m Model) toggleStarOnCurrent() (tea.Model, tea.Cmd) {
+	var id int64
+	switch {
+	case m.focus == focusReader && m.readerArt != nil:
+		id = m.readerArt.ID
+	case m.focus == focusArticles && len(m.articles) > 0:
+		id = m.articles[m.selArt].ID
+	default:
+		return m, nil
+	}
+	return m, toggleStarCmd(m.db, id)
+}
+
+func toggleStarCmd(d *db.DB, articleID int64) tea.Cmd {
+	return func() tea.Msg {
+		starred, err := d.ToggleStar(articleID)
+		if err != nil {
+			return errMsg{err}
+		}
+		return starToggledMsg{articleID: articleID, starred: starred}
+	}
+}
+
+// jumpToNextUnread advances the selection to the next unread article. If the
+// current article list has no unread items past the cursor, it walks the feed
+// list forward looking for a feed with unread items and loads it.
+func (m Model) jumpToNextUnread() (tea.Model, tea.Cmd) {
+	// Within current list first.
+	for i := m.selArt + 1; i < len(m.articles); i++ {
+		if m.articles[i].ReadAt == nil {
+			m.selArt = i
+			m.focus = focusArticles
+			m.status = "next unread"
+			return m, nil
+		}
+	}
+	// Otherwise hop to next feed with unread. Walk through entries() but
+	// skip folder rows — "next unread" is a per-feed concept.
+	entries := m.entries()
+	if len(entries) == 0 {
+		m.status = "no unread"
+		return m, nil
+	}
+	for off := 1; off <= len(entries); off++ {
+		i := (m.selEntry + off) % len(entries)
+		e := entries[i]
+		if e.Kind != entryFeed {
+			continue
+		}
+		if e.UnreadCount > 0 {
+			m.selEntry = i
+			m.selArt = 0
+			m.focus = focusArticles
+			m.status = "next feed: " + e.Name
+			return m, loadArticlesCmd(m.db, e.FeedID, m.filter)
+		}
+	}
+	m.status = "no unread"
+	return m, nil
+}
+
+// entries returns the unified feed list: smart folders first, then regular
+// feeds. Indices are stable within a single Update/View pair. Folder match
+// counts come from m.folderCounts (populated by refreshFolderCounts).
+func (m Model) entries() []feedEntry {
+	out := make([]feedEntry, 0, len(m.smartFolders)+len(m.feeds))
+	for i, f := range m.smartFolders {
+		count := 0
+		if i < len(m.folderCounts) {
+			count = m.folderCounts[i]
+		}
+		out = append(out, feedEntry{
+			Kind:        entryFolder,
+			Name:        f.Name,
+			FolderIdx:   i,
+			UnreadCount: count,
+		})
+	}
+	for _, f := range m.feeds {
+		_, hasErr := m.feedErrors[f.ID]
+		out = append(out, feedEntry{
+			Kind:        entryFeed,
+			Name:        f.Name,
+			FeedID:      f.ID,
+			UnreadCount: f.UnreadCount,
+			HasError:    hasErr,
+		})
+	}
+	return out
+}
+
+// refreshFolderCounts re-evaluates each smart folder's query against the
+// cached allArticles set and stores match counts. Cheap even for hundreds
+// of folders × thousands of articles because filtering is a single pass.
+func (m *Model) refreshFolderCounts() {
+	if len(m.smartFolders) == 0 {
+		m.folderCounts = nil
+		return
+	}
+	counts := make([]int, len(m.smartFolders))
+	// Pre-parse atoms once per folder to avoid re-parsing during the inner
+	// article loop.
+	parsed := make([][]queryAtom, len(m.smartFolders))
+	for i, f := range m.smartFolders {
+		atoms, err := ParseQuery(f.Query)
+		if err != nil {
+			parsed[i] = nil
+			continue
+		}
+		parsed[i] = atoms
+	}
+	for _, a := range m.allArticles {
+		it := db.SearchItem{
+			Title:       a.Title,
+			FeedName:    a.FeedName,
+			Description: a.Description,
+			PublishedAt: a.PublishedAt,
+			ReadAt:      a.ReadAt,
+			StarredAt:   a.StarredAt,
+		}
+		for i, atoms := range parsed {
+			if atoms == nil {
+				continue
+			}
+			if EvalQuery(atoms, it) {
+				counts[i]++
+			}
+		}
+	}
+	m.folderCounts = counts
+}
+
+// currentEntry returns the unified entry at selEntry, or a zero entry if
+// selection is out of range (e.g. during the initial render).
+func (m Model) currentEntry() (feedEntry, bool) {
+	es := m.entries()
+	if m.selEntry < 0 || m.selEntry >= len(es) {
+		return feedEntry{}, false
+	}
+	return es[m.selEntry], true
+}
+
+// loadCurrentCmd returns the load command appropriate for whatever is
+// currently selected — folder or feed. Returns nil if nothing is loadable.
+func (m Model) loadCurrentCmd() tea.Cmd {
+	e, ok := m.currentEntry()
+	if !ok {
+		return nil
+	}
+	if e.Kind == entryFolder {
+		return loadFolderArticlesCmd(m.db, e.FolderIdx, m.smartFolders[e.FolderIdx].Query)
+	}
+	return loadArticlesCmd(m.db, e.FeedID, m.filter)
 }
 
 func (m Model) helpView() string {
@@ -617,13 +1091,58 @@ func loadFeedsCmd(d *db.DB) tea.Cmd {
 	}
 }
 
-func loadArticlesCmd(d *db.DB, feedID int64) tea.Cmd {
+func loadArticlesCmd(d *db.DB, feedID int64, filter articleFilter) tea.Cmd {
 	return func() tea.Msg {
-		articles, err := d.ListArticles(feedID, 100)
+		articles, err := d.ListArticlesFiltered(feedID, filter, 100)
 		if err != nil {
 			return errMsg{err}
 		}
 		return articlesLoadedMsg{feedID: feedID, articles: articles}
+	}
+}
+
+// loadAllArticlesCmd fetches the cross-feed cache used by smart folder
+// match counts. Separate from per-selection loaders so recomputing counts
+// doesn't trash the currently displayed article list.
+func loadAllArticlesCmd(d *db.DB) tea.Cmd {
+	return func() tea.Msg {
+		all, err := d.ListAllArticles(2000)
+		if err != nil {
+			return errMsg{err}
+		}
+		return allArticlesLoadedMsg{articles: all}
+	}
+}
+
+// loadFolderArticlesCmd evaluates a smart folder's query against the full
+// article set. Parsing + filtering happens in the command goroutine so the
+// main loop stays responsive on large DBs.
+func loadFolderArticlesCmd(d *db.DB, folderIdx int, query string) tea.Cmd {
+	return func() tea.Msg {
+		atoms, err := ParseQuery(query)
+		if err != nil {
+			return errMsg{fmt.Errorf("folder query: %w", err)}
+		}
+		all, err := d.ListAllArticles(2000)
+		if err != nil {
+			return errMsg{err}
+		}
+		out := make([]db.Article, 0, len(all))
+		for _, a := range all {
+			// Reuse the search-item evaluator by mapping required fields.
+			it := db.SearchItem{
+				Title:       a.Title,
+				FeedName:    a.FeedName,
+				Description: a.Description,
+				PublishedAt: a.PublishedAt,
+				ReadAt:      a.ReadAt,
+				StarredAt:   a.StarredAt,
+			}
+			if EvalQuery(atoms, it) {
+				out = append(out, a)
+			}
+		}
+		return folderArticlesLoadedMsg{folderIdx: folderIdx, articles: out}
 	}
 }
 

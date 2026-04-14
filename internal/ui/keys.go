@@ -20,7 +20,16 @@ type keyMap struct {
 	OpenURL     key.Binding
 	FullArticle key.Binding
 	Settings    key.Binding
+	Search      key.Binding
 	Help        key.Binding
+
+	FilterAll     key.Binding
+	FilterUnread  key.Binding
+	FilterStarred key.Binding
+	NextUnread    key.Binding
+	Zen           key.Binding
+	Command       key.Binding
+	Star          key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -42,19 +51,29 @@ func defaultKeys() keyMap {
 		OpenURL:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")),
 		FullArticle: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full article")),
 		Settings:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
+		Search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+
+		FilterAll:     key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "all")),
+		FilterUnread:  key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "unread")),
+		FilterStarred: key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "starred")),
+		NextUnread:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next unread")),
+		Zen:           key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zen")),
+		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "command")),
+		Star:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "toggle star")),
 	}
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Back, k.RefreshAll, k.OpenURL, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Back, k.Search, k.Command, k.NextUnread, k.Star, k.Zen, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown},
 		{k.Left, k.Right, k.Tab, k.Enter, k.Back},
-		{k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle},
-		{k.Help, k.Settings, k.Quit},
+		{k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle, k.Star},
+		{k.FilterAll, k.FilterUnread, k.FilterStarred, k.NextUnread, k.Zen},
+		{k.Search, k.Command, k.Help, k.Settings, k.Quit},
 	}
 }

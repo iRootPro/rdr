@@ -25,7 +25,23 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		titleW = 1
 	}
 
-	for i, a := range articles {
+	// Detect cross-feed view: if any row carries a FeedName the loader is
+	// a folder/all-articles source, so reserve space for a feed tag.
+	crossFeed := false
+	for _, a := range articles {
+		if a.FeedName != "" {
+			crossFeed = true
+			break
+		}
+	}
+	feedTagW := 0
+	if crossFeed {
+		feedTagW = 12 // room for "[feedname] "
+	}
+
+	start, end := visibleWindow(len(articles), selected, listVisibleRows(height))
+	for i := start; i < end; i++ {
+		a := articles[i]
 		titleStyle := unreadStyle
 		if a.ReadAt != nil {
 			titleStyle = readStyle
@@ -39,8 +55,23 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 				titleStyle = itemSelectedInactive
 			}
 		}
+		star := "  "
+		if a.StarredAt != nil {
+			star = lipgloss.NewStyle().Foreground(colorYellow).Render("★ ")
+		}
 
-		title := titleStyle.Render(prefix + truncate(a.Title, titleW))
+		titleBudget := titleW - 2 - feedTagW
+		if titleBudget < 1 {
+			titleBudget = 1
+		}
+		titleText := titleStyle.Render(prefix+star) + titleStyle.Render(truncate(a.Title, titleBudget))
+		if crossFeed && a.FeedName != "" {
+			tag := lipgloss.NewStyle().
+				Foreground(colorGreen).
+				Render("  " + truncate(a.FeedName, 10))
+			titleText += tag
+		}
+		title := titleText
 		when := timeAgoStyle.Render(timeAgo(a.PublishedAt))
 
 		line := lipgloss.JoinHorizontal(
@@ -49,7 +80,9 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			when,
 		)
 		b.WriteString(line)
-		b.WriteString("\n")
+		if i < end-1 {
+			b.WriteString("\n")
+		}
 	}
 
 	return framePane(b.String(), active, width, height)

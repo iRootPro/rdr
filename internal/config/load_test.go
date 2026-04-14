@@ -47,6 +47,35 @@ func TestLoad_ParsesValidYAML(t *testing.T) {
 	}
 }
 
+func TestLoad_ParsesSmartFolders(t *testing.T) {
+	home := t.TempDir()
+	body := []byte(`feeds:
+  - name: Habr
+    url: https://habr.com/rss
+smart_folders:
+  - name: Inbox
+    query: unread
+  - name: Today
+    query: today unread
+`)
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), body, 0o644); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+	cfg, err := Load(home)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.SmartFolders) != 2 {
+		t.Fatalf("want 2 folders, got %d", len(cfg.SmartFolders))
+	}
+	if cfg.SmartFolders[0].Name != "Inbox" || cfg.SmartFolders[0].Query != "unread" {
+		t.Fatalf("folder[0] mismatch: %+v", cfg.SmartFolders[0])
+	}
+	if cfg.SmartFolders[1].Query != "today unread" {
+		t.Fatalf("folder[1] query mismatch: %+v", cfg.SmartFolders[1])
+	}
+}
+
 func TestLoad_MalformedYAMLReturnsError(t *testing.T) {
 	home := t.TempDir()
 	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("feeds: [unterminated"), 0o644); err != nil {

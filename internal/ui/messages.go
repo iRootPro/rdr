@@ -27,6 +27,29 @@ type fullArticleLoadedMsg struct {
 	markdown  string
 }
 
+type searchLoadedMsg struct {
+	items []db.SearchItem
+}
+
+type starToggledMsg struct {
+	articleID int64
+	starred   bool
+}
+
+type folderArticlesLoadedMsg struct {
+	folderIdx int
+	articles  []db.Article
+}
+
+type allArticlesLoadedMsg struct {
+	articles []db.Article
+}
+
+type batchAppliedMsg struct {
+	action string // "read" | "unread" | "star" | "unstar"
+	count  int
+}
+
 type errMsg struct {
 	err error
 }
