@@ -323,6 +323,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusFeeds
 			}
 			return m, nil
+		case key.Matches(msg, m.keys.NextArticle):
+			if m.focus == focusReader {
+				return m.readerJump(+1)
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.PrevArticle):
+			if m.focus == focusReader {
+				return m.readerJump(-1)
+			}
+			return m, nil
+		case msg.String() == " ":
+			// Space as page-down in reader (classic less/more convention).
+			if m.focus == focusReader {
+				pgDown := tea.KeyMsg{Type: tea.KeyPgDown}
+				var cmd tea.Cmd
+				m.reader, cmd = m.reader.Update(pgDown)
+				return m, cmd
+			}
+			return m, nil
 		case key.Matches(msg, m.keys.Down):
 			if m.focus == focusReader {
 				var cmd tea.Cmd
@@ -706,6 +725,27 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 	m.focus = focusReader
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
+	feedName := readerFeedName(m.feeds, a.FeedID)
+	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4))
+	m.reader.GotoTop()
+	if a.ReadAt == nil {
+		return m, markReadCmd(m.db, a.ID)
+	}
+	return m, nil
+}
+
+// readerJump advances selArt by dir within the current article list and
+// refreshes reader content without leaving focusReader. No-op if there is
+// no neighbour in the requested direction. Marks the new article read.
+func (m Model) readerJump(dir int) (tea.Model, tea.Cmd) {
+	target := m.selArt + dir
+	if target < 0 || target >= len(m.articles) {
+		m.status = "end of list"
+		return m, nil
+	}
+	m.selArt = target
+	a := m.articles[target]
+	m.readerArt = &a
 	feedName := readerFeedName(m.feeds, a.FeedID)
 	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4))
 	m.reader.GotoTop()
