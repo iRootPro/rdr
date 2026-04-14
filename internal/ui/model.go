@@ -130,6 +130,8 @@ type Model struct {
 	filter            articleFilter
 	zenMode           bool
 	afterSyncCommands []string
+	refreshInterval   time.Duration
+	home              string
 
 	commandInput   textinput.Model
 	commandPrev    focus
@@ -150,7 +152,7 @@ type Model struct {
 	err    error
 }
 
-func New(database *db.DB, fetcher *feed.Fetcher, smartFolders []config.SmartFolder, afterSyncCommands []string) Model {
+func New(database *db.DB, fetcher *feed.Fetcher, smartFolders []config.SmartFolder, afterSyncCommands []string, refreshIntervalMinutes int, home string) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(colorAccent)
@@ -188,21 +190,40 @@ func New(database *db.DB, fetcher *feed.Fetcher, smartFolders []config.SmartFold
 		feedErrors:        map[int64]error{},
 		smartFolders:      smartFolders,
 		afterSyncCommands: afterSyncCommands,
+		refreshInterval:   time.Duration(refreshIntervalMinutes) * time.Minute,
+		home:              home,
 		settingsInput:     ti,
-		searchInput:   si,
-		commandInput:  ci,
-		historyPos:    -1,
-		sortField:     "date",
+		searchInput:       si,
+		commandInput:      ci,
+		commandHistory:    readHistoryFile(home),
+		historyPos:        -1,
+		sortField:         "date",
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		loadFeedsCmd(m.db),
 		loadAllArticlesCmd(m.db),
 		fetchAllCmd(m.fetcher),
 		m.spin.Tick,
-	)
+	}
+	if tick := scheduleRefreshCmd(m.refreshInterval); tick != nil {
+		cmds = append(cmds, tick)
+	}
+	return tea.Batch(cmds...)
+}
+
+// scheduleRefreshCmd arms a one-shot timer that fires refreshTickMsg
+// after interval. Returns nil when auto-refresh is disabled so callers
+// can cheaply branch on the result.
+func scheduleRefreshCmd(interval time.Duration) tea.Cmd {
+	if interval <= 0 {
+		return nil
+	}
+	return tea.Tick(interval, func(time.Time) tea.Msg {
+		return refreshTickMsg{}
+	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -505,6 +526,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.allArticles = msg.articles
 		m.refreshFolderCounts()
 		return m, nil
+
+	case refreshTickMsg:
+		// Re-arm the timer unconditionally; either way we want the next
+		// tick. Skip the fetch itself if one is already running.
+		cmds := []tea.Cmd{}
+		if tick := scheduleRefreshCmd(m.refreshInterval); tick != nil {
+			cmds = append(cmds, tick)
+		}
+		if !m.fetching {
+			m.fetching = true
+			m.status = "auto-fetching…"
+			cmds = append(cmds, fetchAllCmd(m.fetcher), m.spin.Tick)
+		}
+		return m, tea.Batch(cmds...)
 
 	case batchAppliedMsg:
 		m.err = nil

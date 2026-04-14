@@ -13,6 +13,10 @@ type Config struct {
 	Feeds             []FeedEntry   `yaml:"feeds"`
 	SmartFolders      []SmartFolder `yaml:"smart_folders,omitempty"`
 	AfterSyncCommands []string      `yaml:"after_sync_commands,omitempty"`
+
+	// RefreshInterval in minutes. 0 (default) disables the background
+	// auto-refresh timer; use `R` or `:sync` for manual pulls.
+	RefreshInterval int `yaml:"refresh_interval_minutes,omitempty"`
 }
 
 type FeedEntry struct {

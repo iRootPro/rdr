@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -127,6 +128,52 @@ func TestDispatchCommand_UnknownSetsErr(t *testing.T) {
 	m2, _ := dispatchCommand(m, "nosuch thing")
 	if m2.(Model).err == nil {
 		t.Fatal("expected error for unknown command")
+	}
+}
+
+func TestHistoryFile_RoundTrip(t *testing.T) {
+	home := t.TempDir()
+	// Model stores newest-first; file should be oldest-first on disk.
+	history := []string{"sort date", "sync", "zen"} // newest → oldest
+	writeHistoryFile(home, history)
+
+	loaded := readHistoryFile(home)
+	if len(loaded) != len(history) {
+		t.Fatalf("len: want %d, got %d (%v)", len(history), len(loaded), loaded)
+	}
+	for i := range history {
+		if loaded[i] != history[i] {
+			t.Fatalf("pos %d: got %q want %q", i, loaded[i], history[i])
+		}
+	}
+}
+
+func TestHistoryFile_MissingReturnsNil(t *testing.T) {
+	home := t.TempDir()
+	if got := readHistoryFile(home); got != nil {
+		t.Fatalf("want nil for missing file, got %v", got)
+	}
+}
+
+func TestHistoryFile_EmptyHomeIsSafe(t *testing.T) {
+	if got := readHistoryFile(""); got != nil {
+		t.Fatalf("want nil for empty home, got %v", got)
+	}
+	// Should not panic or create anything.
+	writeHistoryFile("", []string{"x"})
+}
+
+func TestHistoryFile_CapsReadAtMaxHistory(t *testing.T) {
+	home := t.TempDir()
+	// Pretend the file grew past maxHistory over many sessions.
+	big := make([]string, maxHistory+20)
+	for i := range big {
+		big[i] = fmt.Sprintf("cmd%d", i)
+	}
+	writeHistoryFile(home, big)
+	loaded := readHistoryFile(home)
+	if len(loaded) != maxHistory {
+		t.Fatalf("want cap at %d, got %d", maxHistory, len(loaded))
 	}
 }
 
