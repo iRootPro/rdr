@@ -76,7 +76,10 @@ func PlaceholderBlock(id uint32, cols, rows int) string {
 	r := byte((id >> 16) & 0xff)
 	g := byte((id >> 8) & 0xff)
 	bv := byte(id & 0xff)
-	colorPrefix := fmt.Sprintf("\x1b[38:2:%d:%d:%dm", r, g, bv)
+	// Use semicolon-separated SGR so lipgloss/reflow recognize this as
+	// a truecolor FG and don't strip or mangle it. The colon-separator
+	// form is ISO-valid but not universally parsed.
+	colorPrefix := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, bv)
 
 	var b strings.Builder
 	for row := 0; row < rows; row++ {

@@ -75,7 +75,7 @@ func TestPlaceholderBlock_EmitsFGColorPerRow(t *testing.T) {
 
 	// Each row must independently set our FG color because lipgloss
 	// borders emit a reset between lines.
-	colorMarker := "\x1b[38:2:170:187:204m"
+	colorMarker := "\x1b[38;2;170;187;204m"
 	if count := strings.Count(block, colorMarker); count != 2 {
 		t.Fatalf("want 2 FG color prefixes (one per row), got %d: %q", count, block)
 	}

@@ -1,5 +1,6 @@
 # build artifacts
 /rdr
+/kittytest
 
 # local dev state
 /dev/
