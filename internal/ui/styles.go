@@ -17,14 +17,20 @@ var (
 	colorTeal      = lipgloss.Color("#2ac3de")
 
 	paneActive = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
+			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorAccent).
 			Padding(0, 1)
 
 	paneInactive = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
+			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorBorder).
 			Padding(0, 1)
+
+	// selectedRow paints a soft background across the full row width
+	// behind the currently focused list item. Combined with itemSelected
+	// on the text, the effect is a highlighted bar rather than a bare
+	// colour shift.
+	selectedRow = lipgloss.NewStyle().Background(colorAltBG)
 
 	paneTitle = lipgloss.NewStyle().
 			Foreground(colorAccent).

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -90,10 +91,14 @@ func renderReaderBody(a db.Article, feedName string, contentW int, showImages bo
 	b.WriteString(readerTitleLarge.Render(a.Title))
 	b.WriteString("\n\n")
 
-	// Meta: source + time, divided by double-padded middot.
+	// Meta: source + time + (optional) reading time, divided by
+	// double-padded middots.
 	metaParts := []string{readerSource.Render(feedName)}
 	if ago := timeAgo(a.PublishedAt); ago != "" {
 		metaParts = append(metaParts, readerMetaMuted.Render(ago))
+	}
+	if rt := readingTime(a); rt != "" {
+		metaParts = append(metaParts, readerMetaMuted.Render(rt))
 	}
 	b.WriteString(strings.Join(metaParts, readerMetaMuted.Render("  ·  ")))
 	b.WriteString("\n")
@@ -213,6 +218,35 @@ func sanitizeArticleMarkdown(md string, showImages bool) string {
 	md = reBareImageURL.ReplaceAllString(md, "")
 	md = reExtraBlankLines.ReplaceAllString(md, "\n\n")
 	return strings.TrimSpace(md)
+}
+
+// readingTime returns a human label like "5 min read" estimated at 200
+// words per minute. Prefers the cached body; falls back to content then
+// description. Returns "" when there's nothing to count (e.g. HN stubs).
+func readingTime(a db.Article) string {
+	source := a.CachedBody
+	if source == "" {
+		source = a.Content
+	}
+	if source == "" {
+		source = a.Description
+	}
+	if source == "" {
+		return ""
+	}
+	text := stripHTML(source)
+	words := len(strings.Fields(text))
+	if words < 20 {
+		// Too short to be a real article body (HN metadata stubs, empty
+		// descriptions). Skip the label rather than show "1 min read"
+		// for every feed-list preview.
+		return ""
+	}
+	mins := (words + 199) / 200 // round up
+	if mins < 1 {
+		mins = 1
+	}
+	return fmt.Sprintf("%d min read", mins)
 }
 
 func renderMarkdown(md string, width int) (string, error) {
