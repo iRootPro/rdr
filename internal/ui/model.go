@@ -358,6 +358,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.openLinkPickerOnCurrent()
 			}
 			return m, nil
+		case key.Matches(msg, m.keys.ToggleRead):
+			return m.toggleReadOnCurrent()
+		case key.Matches(msg, m.keys.MarkAllRead):
+			return m.markAllReadOnCurrentEntry()
 		case key.Matches(msg, m.keys.NextArticle):
 			if m.focus == focusReader {
 				return m.readerJump(+1)
@@ -568,17 +572,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case articleMarkedMsg:
 		m.err = nil
-		// Update cached article so folder counts reflect the new read state
-		// without a full DB round-trip.
 		now := time.Now().UTC()
-		for i := range m.allArticles {
-			if m.allArticles[i].ID == msg.articleID && m.allArticles[i].ReadAt == nil {
-				m.allArticles[i].ReadAt = &now
+		// Sync both the currently loaded article list and the cross-feed
+		// cache so folder counts / UI update in place without reloads.
+		updateRead := func(a *db.Article) {
+			if msg.unread {
+				a.ReadAt = nil
+				return
+			}
+			if a.ReadAt == nil {
+				a.ReadAt = &now
+			}
+		}
+		for i := range m.articles {
+			if m.articles[i].ID == msg.articleID {
+				updateRead(&m.articles[i])
 				break
 			}
 		}
+		for i := range m.allArticles {
+			if m.allArticles[i].ID == msg.articleID {
+				updateRead(&m.allArticles[i])
+				break
+			}
+		}
+		if m.readerArt != nil && m.readerArt.ID == msg.articleID {
+			updateRead(m.readerArt)
+		}
 		m.refreshFolderCounts()
-		return m, nil
+		if msg.unread {
+			m.status = "marked unread"
+		} else {
+			m.status = "marked read"
+		}
+		// Refresh the feed list so unread counters update. The current
+		// article list stays as-is (we already patched it) unless the
+		// user is on filter=unread, where the row should disappear.
+		cmds := []tea.Cmd{loadFeedsCmd(m.db)}
+		if m.filter == filterUnread && !msg.unread && len(m.feeds) > 0 {
+			cmds = append(cmds, m.loadCurrentCmd())
+		}
+		return m, tea.Batch(cmds...)
+
+	case feedMarkedReadMsg:
+		m.err = nil
+		m.status = fmt.Sprintf("marked %d read", msg.count)
+		// Reload feeds (counters), cache (folder counts), and current list.
+		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
+		if c := m.loadCurrentCmd(); c != nil {
+			cmds = append(cmds, c)
+		}
+		return m, tea.Batch(cmds...)
 
 	case fullArticleLoadedMsg:
 		m.fetching = false
@@ -1014,6 +1058,70 @@ func (m Model) View() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Top, row, status, helpView)
+}
+
+// toggleReadOnCurrent flips the read state of the article under the cursor
+// (articles list) or the one being read (reader focus). No-op otherwise.
+func (m Model) toggleReadOnCurrent() (tea.Model, tea.Cmd) {
+	var (
+		id       int64
+		makeRead bool
+	)
+	switch {
+	case m.focus == focusReader && m.readerArt != nil:
+		id = m.readerArt.ID
+		makeRead = m.readerArt.ReadAt == nil
+	case m.focus == focusArticles && len(m.articles) > 0:
+		a := m.articles[m.selArt]
+		id = a.ID
+		makeRead = a.ReadAt == nil
+	default:
+		return m, nil
+	}
+	return m, toggleReadCmd(m.db, id, makeRead)
+}
+
+func toggleReadCmd(d *db.DB, articleID int64, makeRead bool) tea.Cmd {
+	return func() tea.Msg {
+		var err error
+		if makeRead {
+			err = d.MarkRead(articleID)
+		} else {
+			err = d.MarkUnread(articleID)
+		}
+		if err != nil {
+			return errMsg{err}
+		}
+		return articleMarkedMsg{articleID: articleID, unread: !makeRead}
+	}
+}
+
+// markAllReadOnCurrentEntry marks every article in the current feed or
+// folder read. For folders it dispatches a batch query command reusing
+// the existing batchApplyCmd plumbing.
+func (m Model) markAllReadOnCurrentEntry() (tea.Model, tea.Cmd) {
+	e, ok := m.currentEntry()
+	if !ok {
+		return m, nil
+	}
+	switch e.Kind {
+	case entryFeed:
+		return m, markFeedReadCmd(m.db, e.FeedID)
+	case entryFolder:
+		q := m.smartFolders[e.FolderIdx].Query
+		return m, batchApplyCmd(m.db, q, "read")
+	}
+	return m, nil
+}
+
+func markFeedReadCmd(d *db.DB, feedID int64) tea.Cmd {
+	return func() tea.Msg {
+		n, err := d.MarkFeedRead(feedID)
+		if err != nil {
+			return errMsg{err}
+		}
+		return feedMarkedReadMsg{feedID: feedID, count: n}
+	}
 }
 
 // toggleStarOnCurrent toggles the starred flag for the article under the

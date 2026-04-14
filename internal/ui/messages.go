@@ -20,6 +20,12 @@ type fetchDoneMsg struct {
 
 type articleMarkedMsg struct {
 	articleID int64
+	unread    bool // true when this was a mark-unread op
+}
+
+type feedMarkedReadMsg struct {
+	feedID int64
+	count  int
 }
 
 type fullArticleLoadedMsg struct {
