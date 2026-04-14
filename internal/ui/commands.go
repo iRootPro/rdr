@@ -84,6 +84,7 @@ var commandCompletions = []commandSuggestion{
 	{"unstar", "Unstar matching articles (:unstar <query>)"},
 	{"import", "Import feeds from OPML file (:import <path>)"},
 	{"export", "Export feeds to OPML file (:export <path>)"},
+	{"images", "Toggle image markdown in reader"},
 	{"zen", "Toggle zen mode"},
 	{"help", "Toggle help overlay"},
 	{"settings", "Open feed settings"},
@@ -338,6 +339,20 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 
 	case "zen":
 		m.zenMode = !m.zenMode
+		return m, nil
+
+	case "images":
+		m.showImages = !m.showImages
+		if m.showImages {
+			m.status = "images on"
+		} else {
+			m.status = "images off"
+		}
+		// If reading an article right now, re-render in place.
+		if m.focus == focusReader && m.readerArt != nil {
+			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.showImages))
+		}
 		return m, nil
 
 	case "help":

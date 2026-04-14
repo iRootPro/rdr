@@ -129,6 +129,7 @@ type Model struct {
 
 	filter            articleFilter
 	zenMode           bool
+	showImages        bool
 	afterSyncCommands []string
 	refreshInterval   time.Duration
 	home              string
@@ -235,7 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reader.Height = m.height - 2
 		if m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4))
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.showImages))
 		}
 		return m, nil
 
@@ -574,7 +575,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			now := time.Now().UTC()
 			m.readerArt.CachedAt = &now
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4))
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.showImages))
 			m.reader.GotoTop()
 		}
 		return m, nil
@@ -761,7 +762,7 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
 	feedName := readerFeedName(m.feeds, a.FeedID)
-	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4))
+	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4, m.showImages))
 	m.reader.GotoTop()
 	if a.ReadAt == nil {
 		return m, markReadCmd(m.db, a.ID)
@@ -782,7 +783,7 @@ func (m Model) readerJump(dir int) (tea.Model, tea.Cmd) {
 	a := m.articles[target]
 	m.readerArt = &a
 	feedName := readerFeedName(m.feeds, a.FeedID)
-	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4))
+	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4, m.showImages))
 	m.reader.GotoTop()
 	if a.ReadAt == nil {
 		return m, markReadCmd(m.db, a.ID)
