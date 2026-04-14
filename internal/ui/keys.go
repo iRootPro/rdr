@@ -33,6 +33,8 @@ type keyMap struct {
 	NextArticle   key.Binding
 	PrevArticle   key.Binding
 	LinkPicker    key.Binding
+	ToggleRead    key.Binding
+	MarkAllRead   key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -67,6 +69,8 @@ func defaultKeys() keyMap {
 		NextArticle:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next article")),
 		PrevArticle:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev article")),
 		LinkPicker:    key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "links")),
+		ToggleRead:    key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle read")),
+		MarkAllRead:   key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "mark all read")),
 	}
 }
 

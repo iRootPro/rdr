@@ -190,6 +190,29 @@ func (d *DB) ListAllArticles(limit int) ([]Article, error) {
 	return out, rows.Err()
 }
 
+// MarkFeedRead marks every unread article in a feed as read in a single
+// UPDATE and returns the affected row count.
+func (d *DB) MarkFeedRead(feedID int64) (int, error) {
+	res, err := d.sql.Exec(
+		`UPDATE articles SET read_at = ? WHERE feed_id = ? AND read_at IS NULL`,
+		time.Now().UTC(), feedID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("mark feed read: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
+// MarkUnread clears the read state of a single article. Idempotent.
+func (d *DB) MarkUnread(articleID int64) error {
+	_, err := d.sql.Exec(
+		`UPDATE articles SET read_at = NULL WHERE id = ?`,
+		articleID,
+	)
+	return err
+}
+
 // BulkMarkRead marks many articles read in one UPDATE. No-op on empty
 // input. Idempotent for already-read rows.
 func (d *DB) BulkMarkRead(ids []int64) error {

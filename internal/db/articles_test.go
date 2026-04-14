@@ -269,6 +269,83 @@ func TestListArticlesFiltered_StarredOnly(t *testing.T) {
 	}
 }
 
+func TestMarkFeedRead_MarksOnlyThatFeedsUnread(t *testing.T) {
+	d := openTestDB(t)
+	fa, _ := d.UpsertFeed("A", "https://a.example/rss")
+	fb, _ := d.UpsertFeed("B", "https://b.example/rss")
+	base := time.Now().UTC()
+
+	for i := 0; i < 3; i++ {
+		if _, err := d.UpsertArticle(newArticle(fa.ID, "https://a.example/"+string(rune('a'+i)), "a", base.Add(time.Duration(i)*time.Minute))); err != nil {
+			t.Fatalf("upsert A: %v", err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := d.UpsertArticle(newArticle(fb.ID, "https://b.example/"+string(rune('a'+i)), "b", base.Add(time.Duration(i)*time.Minute))); err != nil {
+			t.Fatalf("upsert B: %v", err)
+		}
+	}
+
+	n, err := d.MarkFeedRead(fa.ID)
+	if err != nil {
+		t.Fatalf("MarkFeedRead: %v", err)
+	}
+	if n != 3 {
+		t.Fatalf("want 3 marked, got %d", n)
+	}
+
+	listA, _ := d.ListArticles(fa.ID, 10)
+	for _, a := range listA {
+		if a.ReadAt == nil {
+			t.Fatalf("feed A article %d still unread", a.ID)
+		}
+	}
+	listB, _ := d.ListArticles(fb.ID, 10)
+	for _, b := range listB {
+		if b.ReadAt != nil {
+			t.Fatalf("feed B article %d unexpectedly read", b.ID)
+		}
+	}
+}
+
+func TestMarkFeedRead_IdempotentOnAlreadyRead(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	if _, err := d.UpsertArticle(newArticle(f.ID, "https://a.example/1", "v", time.Now().UTC())); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if _, err := d.MarkFeedRead(f.ID); err != nil {
+		t.Fatalf("first MarkFeedRead: %v", err)
+	}
+	n, err := d.MarkFeedRead(f.ID)
+	if err != nil {
+		t.Fatalf("second MarkFeedRead: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("want 0 on idempotent second call, got %d", n)
+	}
+}
+
+func TestMarkUnread_ClearsReadAt(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	if _, err := d.UpsertArticle(newArticle(f.ID, "https://a.example/1", "v", time.Now().UTC())); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	list, _ := d.ListArticles(f.ID, 10)
+	id := list[0].ID
+	if err := d.MarkRead(id); err != nil {
+		t.Fatalf("MarkRead: %v", err)
+	}
+	if err := d.MarkUnread(id); err != nil {
+		t.Fatalf("MarkUnread: %v", err)
+	}
+	list, _ = d.ListArticles(f.ID, 10)
+	if list[0].ReadAt != nil {
+		t.Fatalf("read_at still set after MarkUnread")
+	}
+}
+
 func TestBulkMarkRead_MarksOnlyUnread(t *testing.T) {
 	d := openTestDB(t)
 	f, err := d.UpsertFeed("A", "https://a.example/rss")
