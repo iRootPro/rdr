@@ -27,7 +27,7 @@ var (
 			Italic(true)
 )
 
-func buildReaderContent(a db.Article, feedName string, width int) string {
+func buildReaderContent(a db.Article, feedName string, width int, showImages bool) string {
 	var b strings.Builder
 
 	b.WriteString(readerTitle.Render(a.Title))
@@ -50,10 +50,11 @@ func buildReaderContent(a db.Article, feedName string, width int) string {
 	b.WriteString("\n\n")
 
 	if a.CachedBody != "" {
-		if rendered, err := renderMarkdown(a.CachedBody, width); err == nil {
+		body := sanitizeArticleMarkdown(a.CachedBody, showImages)
+		if rendered, err := renderMarkdown(body, width); err == nil {
 			b.WriteString(rendered)
 		} else {
-			b.WriteString(readerBody.Render(wrap(stripHTML(a.CachedBody), width)))
+			b.WriteString(readerBody.Render(wrap(stripHTML(body), width)))
 		}
 	} else {
 		body := stripHTML(a.Content)
@@ -68,6 +69,35 @@ func buildReaderContent(a db.Article, feedName string, width int) string {
 		b.WriteString(readerHint.Render("[f] load full article"))
 	}
 	return b.String()
+}
+
+var (
+	// Markdown image syntax ![alt](url) — optionally with "title" after
+	// the URL. We strip these wholesale for a cleaner reader view.
+	reMarkdownImage = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)`)
+
+	// A bare URL on its own line (optionally inside <angle> brackets), typical
+	// of html-to-markdown output for standalone images that didn't become
+	// proper image syntax. Matches http(s) URLs ending in common image
+	// extensions so we don't strip legitimate article links.
+	reBareImageURL = regexp.MustCompile(`(?m)^\s*<?https?://\S+\.(?:png|jpe?g|gif|webp|svg)>?\s*$`)
+
+	// Collapse 3+ consecutive newlines down to a paragraph break.
+	reExtraBlankLines = regexp.MustCompile(`\n{3,}`)
+)
+
+// sanitizeArticleMarkdown cleans up markdown for reader rendering. When
+// showImages is false, all image syntax and bare image URLs are removed.
+// This is a pragmatic fix for articles where every paragraph is padded
+// with CDN image links that glamour renders as noisy text.
+func sanitizeArticleMarkdown(md string, showImages bool) string {
+	if showImages {
+		return md
+	}
+	md = reMarkdownImage.ReplaceAllString(md, "")
+	md = reBareImageURL.ReplaceAllString(md, "")
+	md = reExtraBlankLines.ReplaceAllString(md, "\n\n")
+	return strings.TrimSpace(md)
 }
 
 func renderMarkdown(md string, width int) (string, error) {
