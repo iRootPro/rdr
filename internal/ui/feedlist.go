@@ -101,11 +101,14 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 			counter = counterStyle.Render(fmt.Sprintf("%d", e.UnreadCount))
 		}
 
-		nameCell := lipgloss.NewStyle().Width(nameCellW).Render(name)
-		counterCell := lipgloss.NewStyle().
-			Width(counterCol).
-			Align(lipgloss.Right).
-			Render(counter)
+		nameCellStyle := lipgloss.NewStyle().Width(nameCellW)
+		counterCellStyle := lipgloss.NewStyle().Width(counterCol).Align(lipgloss.Right)
+		if i == selected && active {
+			nameCellStyle = nameCellStyle.Background(colorAltBG)
+			counterCellStyle = counterCellStyle.Background(colorAltBG)
+		}
+		nameCell := nameCellStyle.Render(name)
+		counterCell := counterCellStyle.Render(counter)
 
 		line := lipgloss.JoinHorizontal(lipgloss.Top, nameCell, counterCell)
 		b.WriteString(line)

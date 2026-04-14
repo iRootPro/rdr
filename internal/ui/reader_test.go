@@ -87,6 +87,72 @@ func TestRenderEmptyReader_ContainsCTABox(t *testing.T) {
 	}
 }
 
+func TestReadingTime_EstimatesFromBody(t *testing.T) {
+	// 400 words ≈ 2 min at 200 wpm.
+	words := make([]string, 400)
+	for i := range words {
+		words[i] = "word"
+	}
+	body := strings.Join(words, " ")
+	a := db.Article{CachedBody: body}
+	got := readingTime(a)
+	if got != "2 min read" {
+		t.Fatalf("want 2 min read, got %q", got)
+	}
+}
+
+func TestReadingTime_RoundsUp(t *testing.T) {
+	// 250 words → ceil(250/200) = 2 min
+	words := make([]string, 250)
+	for i := range words {
+		words[i] = "w"
+	}
+	a := db.Article{CachedBody: strings.Join(words, " ")}
+	if got := readingTime(a); got != "2 min read" {
+		t.Fatalf("250 words: got %q, want 2 min read", got)
+	}
+}
+
+func TestReadingTime_SkipsShortStubs(t *testing.T) {
+	// HN-ish metadata stub with <20 words → no label
+	a := db.Article{Content: "Article URL: https://x Points: 17 Comments: 0"}
+	if got := readingTime(a); got != "" {
+		t.Fatalf("short stub should return empty, got %q", got)
+	}
+}
+
+func TestReadingTime_FallsBackToContent(t *testing.T) {
+	words := make([]string, 300)
+	for i := range words {
+		words[i] = "w"
+	}
+	a := db.Article{Content: strings.Join(words, " ")}
+	if got := readingTime(a); got == "" {
+		t.Fatalf("should use Content when CachedBody empty")
+	}
+}
+
+func TestDateBucket_TodayYesterdayEtc(t *testing.T) {
+	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		when time.Time
+		want string
+	}{
+		{now, "Today"},
+		{now.Add(-2 * time.Hour), "Today"},
+		{now.AddDate(0, 0, -1).Add(time.Hour), "Yesterday"},
+		{now.AddDate(0, 0, -3), "This week"},
+		{now.AddDate(0, 0, -10), "This month"},
+		{now.AddDate(0, 0, -60), "Older"},
+		{time.Time{}, "Older"},
+	}
+	for i, c := range cases {
+		if got := dateBucket(c.when, now); got != c.want {
+			t.Fatalf("case %d: got %q, want %q", i, got, c.want)
+		}
+	}
+}
+
 func TestRenderEmptyReader_ShowsContentStub(t *testing.T) {
 	a := db.Article{
 		Title:       "HN Item",
