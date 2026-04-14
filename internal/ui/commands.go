@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,54 @@ import (
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
 )
+
+const historyFileName = "history"
+const maxHistory = 50
+
+// readHistoryFile loads a previously saved command history. The file format
+// is one command per line, oldest first (append-only feel like ~/.bash_history).
+// Missing file yields a nil slice.
+func readHistoryFile(home string) []string {
+	if home == "" {
+		return nil
+	}
+	f, err := os.Open(filepath.Join(home, historyFileName))
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		if line := strings.TrimSpace(scanner.Text()); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	// File is oldest-first; Model stores newest-first.
+	out := make([]string, 0, len(lines))
+	for i := len(lines) - 1; i >= 0; i-- {
+		out = append(out, lines[i])
+	}
+	if len(out) > maxHistory {
+		out = out[:maxHistory]
+	}
+	return out
+}
+
+// writeHistoryFile serializes history (newest-first in memory) to disk
+// in chronological (oldest-first) order. Failure is silent — history is
+// a QoL feature and we never want to block command execution on it.
+func writeHistoryFile(home string, history []string) {
+	if home == "" {
+		return
+	}
+	var b strings.Builder
+	for i := len(history) - 1; i >= 0; i-- {
+		b.WriteString(history[i])
+		b.WriteByte('\n')
+	}
+	_ = os.WriteFile(filepath.Join(home, historyFileName), []byte(b.String()), 0o644)
+}
 
 type commandSuggestion struct {
 	Complete string
@@ -363,16 +412,17 @@ func batchApplyCmd(d *db.DB, queryStr, action string) tea.Cmd {
 }
 
 // pushHistory prepends a command to history, de-duping against the last
-// entry and capping size. Called only on successful submission.
+// entry and capping size. Called only on successful submission. Persists
+// to disk best-effort (errors are swallowed).
 func (m *Model) pushHistory(line string) {
 	if len(m.commandHistory) > 0 && m.commandHistory[0] == line {
 		return
 	}
-	const maxHistory = 50
 	m.commandHistory = append([]string{line}, m.commandHistory...)
 	if len(m.commandHistory) > maxHistory {
 		m.commandHistory = m.commandHistory[:maxHistory]
 	}
+	writeHistoryFile(m.home, m.commandHistory)
 }
 
 // historyPrev walks backwards through history (older commands). Stashes

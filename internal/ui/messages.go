@@ -50,6 +50,10 @@ type batchAppliedMsg struct {
 	count  int
 }
 
+// refreshTickMsg fires from the background tea.Tick when it is time to
+// auto-sync. The handler re-arms the timer after kicking off a fetch.
+type refreshTickMsg struct{}
+
 type errMsg struct {
 	err error
 }
