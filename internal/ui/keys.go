@@ -74,17 +74,237 @@ func defaultKeys() keyMap {
 	}
 }
 
+// ShortHelp / FullHelp from bubbles keymap interface are no longer used;
+// we route through shortHelpFor / fullHelpFor below. The methods stay
+// as thin wrappers so anything still touching the interface keeps
+// compiling, but they're not invoked from rendering.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Back, k.Search, k.Command, k.NextUnread, k.Star, k.Zen, k.Help, k.Quit}
+	return shortHelpFor(focusFeeds, k)
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown},
-		{k.Left, k.Right, k.Tab, k.Enter, k.Back},
-		{k.NextArticle, k.PrevArticle, k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle, k.Star},
-		{k.ToggleRead, k.MarkAllRead, k.YankURL, k.YankMarkdown},
-		{k.NextUnread, k.Zen, k.LinkPicker},
-		{k.Search, k.Command, k.Help, k.Settings, k.Quit},
+	return [][]key.Binding{{k.Help, k.Quit}}
+}
+
+// helpEntry / helpSection describe a row in the full-screen help.
+type helpEntry struct {
+	Keys string // e.g. "j / k" or "space"
+	Desc string // e.g. "scroll line"
+}
+
+type helpSection struct {
+	Title   string
+	Entries []helpEntry
+}
+
+// shortHelpFor returns the subset of bindings that actually do something
+// in the given focus. Rendered as a single ShortHelpView row beneath
+// every view.
+func shortHelpFor(f focus, k keyMap) []key.Binding {
+	switch f {
+	case focusFeeds:
+		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleFold, k.Search, k.Command, k.Help, k.Quit}
+	case focusArticles:
+		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Star, k.NextUnread, k.Search, k.Help, k.Quit}
+	case focusReader:
+		return []key.Binding{k.Up, k.Down, k.NextArticle, k.PrevArticle, k.FullArticle, k.LinkPicker, k.OpenURL, k.YankURL, k.Star, k.Back, k.Help}
+	case focusSettings:
+		return []key.Binding{k.Up, k.Down, k.Enter, k.Back, k.Help, k.Quit}
+	case focusSearch:
+		return []key.Binding{k.Up, k.Down, k.Enter, k.Back, k.Help}
+	case focusCommand:
+		return []key.Binding{k.Up, k.Down, k.Enter, k.Back}
+	case focusLinks:
+		return []key.Binding{k.Up, k.Down, k.Enter, k.Back, k.Help}
+	case focusHelp:
+		return []key.Binding{k.Back, k.Help}
 	}
+	return []key.Binding{k.Help, k.Quit}
+}
+
+// fullHelpFor returns grouped sections shown on the full-screen help
+// overlay. Each focus contributes its own context sections; a Global
+// section always comes last.
+func fullHelpFor(f focus) []helpSection {
+	global := helpSection{
+		Title: "Global",
+		Entries: []helpEntry{
+			{"/", "open search picker"},
+			{":", "open command mode"},
+			{"R", "sync all feeds"},
+			{"s", "open settings"},
+			{"z", "toggle zen mode"},
+			{"?", "toggle this help"},
+			{"q", "quit"},
+		},
+	}
+
+	switch f {
+	case focusFeeds, focusArticles:
+		nav := helpSection{
+			Title: "Navigation",
+			Entries: []helpEntry{
+				{"j / k", "down / up"},
+				{"tab", "switch pane"},
+				{"enter", "open selection"},
+				{"g / G", "top / bottom"},
+				{"^u / ^d", "page up / down"},
+				{"n", "next unread"},
+				{"space", "collapse category (feeds pane)"},
+			},
+		}
+		article := helpSection{
+			Title: "Article ops",
+			Entries: []helpEntry{
+				{"x / X", "toggle / mark all read"},
+				{"m", "toggle star"},
+				{"y / Y", "yank URL / [title](url)"},
+				{"o", "open in browser"},
+				{"1 2 3", "filter all / unread / starred (via :filter)"},
+			},
+		}
+		return []helpSection{nav, article, global}
+
+	case focusReader:
+		nav := helpSection{
+			Title: "Reader",
+			Entries: []helpEntry{
+				{"j / k", "scroll line"},
+				{"space", "page down"},
+				{"J / K", "next / prev article"},
+				{"g / G", "top / bottom"},
+				{"esc", "back to articles"},
+			},
+		}
+		article := helpSection{
+			Title: "Article ops",
+			Entries: []helpEntry{
+				{"f", "load full article"},
+				{"L", "link picker"},
+				{"o", "open in browser"},
+				{"y / Y", "yank URL / [title](url)"},
+				{"x", "toggle read"},
+				{"m", "toggle star"},
+				{":images", "toggle inline images"},
+			},
+		}
+		return []helpSection{nav, article, global}
+
+	case focusSettings:
+		return []helpSection{
+			{
+				Title: "Feed settings",
+				Entries: []helpEntry{
+					{"j / k", "down / up"},
+					{"a", "add feed"},
+					{"d", "delete feed"},
+					{"e", "rename feed"},
+					{"esc", "close"},
+				},
+			},
+			global,
+		}
+
+	case focusSearch:
+		return []helpSection{
+			{
+				Title: "Search picker",
+				Entries: []helpEntry{
+					{"↑ / ↓", "navigate results"},
+					{"enter", "open selection"},
+					{"esc", "close"},
+				},
+			},
+			{
+				Title: "Query syntax",
+				Entries: []helpEntry{
+					{"word", "match title or feed name"},
+					{"title:rust", "field match"},
+					{"feed:habr", "feed name"},
+					{"unread", "only unread"},
+					{"starred", "only starred"},
+					{"today", "published today"},
+					{"newer:1w", "newer than 1 week"},
+					{"~title:ad", "negate any atom"},
+				},
+			},
+			global,
+		}
+
+	case focusCommand:
+		return []helpSection{
+			{
+				Title: "Command mode",
+				Entries: []helpEntry{
+					{"↑ / ↓", "navigate suggestions"},
+					{"tab", "complete highlighted"},
+					{"^p / ^n", "history prev / next"},
+					{"enter", "execute"},
+					{"esc", "cancel"},
+				},
+			},
+			{
+				Title: "Common commands",
+				Entries: []helpEntry{
+					{":sync", "refresh all feeds"},
+					{":sort date|title", "change sort"},
+					{":filter unread|starred", "set filter"},
+					{":read <query>", "mark matches read"},
+					{":star <query>", "star matches"},
+					{":copy url <query>", "copy URLs to clipboard"},
+					{":import / :export <path>", "OPML in/out"},
+					{":collapseall / :expandall", "toggle all categories"},
+				},
+			},
+		}
+
+	case focusLinks:
+		return []helpSection{
+			{
+				Title: "Link picker",
+				Entries: []helpEntry{
+					{"j / k", "navigate"},
+					{"g / G", "top / bottom"},
+					{"enter", "open in browser"},
+					{"esc", "close"},
+				},
+			},
+			global,
+		}
+
+	case focusHelp:
+		return []helpSection{
+			{
+				Title: "Help",
+				Entries: []helpEntry{
+					{"esc / ?", "close"},
+				},
+			},
+		}
+	}
+	return []helpSection{global}
+}
+
+// focusLabel is the human-readable name of a focus, used in the help
+// screen title and other places where we want to print the mode name.
+func focusLabel(f focus) string {
+	switch f {
+	case focusFeeds:
+		return "Feeds"
+	case focusArticles:
+		return "Articles"
+	case focusReader:
+		return "Reader"
+	case focusSettings:
+		return "Settings"
+	case focusSearch:
+		return "Search"
+	case focusCommand:
+		return "Command"
+	case focusLinks:
+		return "Links"
+	case focusHelp:
+		return "Help"
+	}
+	return ""
 }
