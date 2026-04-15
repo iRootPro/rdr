@@ -610,7 +610,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.loadCurrentCmd(); c != nil {
 			cmds = append(cmds, c)
 		}
-		cmds = append(cmds, m.showToast(fmt.Sprintf("%s · %d articles", msg.action, msg.count)))
+		// Only surface a toast when something actually changed. Zero-match
+		// batches fire constantly from after_sync_commands and would
+		// otherwise clobber the "synced N feeds" toast with a misleading
+		// "read · 0 articles".
+		if msg.count > 0 {
+			cmds = append(cmds, m.showToast(fmt.Sprintf("%s · %d articles", msg.action, msg.count)))
+		}
 		return m, tea.Batch(cmds...)
 
 	case toastExpiredMsg:
