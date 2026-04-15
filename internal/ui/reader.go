@@ -119,18 +119,59 @@ func renderReaderBody(a db.Article, feedName string, contentW int, showImages bo
 	b.WriteString(readerMetaMuted.Render(strings.Repeat("─", contentW)))
 	b.WriteString("\n\n")
 
-	// Body vs empty state.
-	if a.CachedBody != "" {
+	// Body vs preview vs empty state.
+	//
+	// Precedence:
+	//   1. cached_body — full article fetched via 'f'. Render via glamour.
+	//   2. description / content — most RSS items ship with a readable
+	//      summary. Render that inline + a subtle footer inviting the
+	//      user to pull the full article.
+	//   3. nothing useful — fall back to the big empty-state card
+	//      (HN-style stubs where Content is just metadata).
+	switch {
+	case a.CachedBody != "":
 		md := sanitizeArticleMarkdown(a.CachedBody, showImages)
 		if rendered, err := renderMarkdown(md, contentW); err == nil {
 			b.WriteString(rendered)
 		} else {
 			b.WriteString(readerBody.Render(wrap(stripHTML(md), contentW)))
 		}
-	} else {
+	case hasReadablePreview(a):
+		preview := articlePreviewText(a)
+		// Try glamour (description is often HTML-ish Markdown) and fall
+		// back to stripHTML + manual wrap if that fails.
+		if rendered, err := renderMarkdown(preview, contentW); err == nil {
+			b.WriteString(rendered)
+		} else {
+			b.WriteString(readerBody.Render(wrap(stripHTML(preview), contentW)))
+		}
+		b.WriteString("\n\n")
+		b.WriteString(readerMetaMuted.Render(strings.Repeat("─", contentW)))
+		b.WriteString("\n")
+		hint := readerEmptyCTA.Render("Press [f]") +
+			readerMetaMuted.Render(" to load the full article")
+		b.WriteString(hint)
+	default:
 		b.WriteString(renderEmptyReader(a, contentW))
 	}
 	return b.String()
+}
+
+// hasReadablePreview decides whether an article's description / content
+// has enough text to show as the main reader body. We count non-HTML
+// words; anything under 20 words is treated as metadata-only (HN stubs)
+// and routed to the empty-state card instead.
+func hasReadablePreview(a db.Article) bool {
+	return len(strings.Fields(stripHTML(articlePreviewText(a)))) >= 20
+}
+
+// articlePreviewText picks the richest preview field available. Prefers
+// Content (often longer on Atom feeds) then falls back to Description.
+func articlePreviewText(a db.Article) string {
+	if c := strings.TrimSpace(a.Content); c != "" {
+		return c
+	}
+	return strings.TrimSpace(a.Description)
 }
 
 // renderEmptyReader draws a centred rounded-border card prompting the
