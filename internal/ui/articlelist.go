@@ -20,9 +20,16 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		return framePane(b.String(), active, width, height)
 	}
 
-	titleW := width - 14
-	if titleW < 1 {
-		titleW = 1
+	// Reserve a fixed-width right column for time + optional reading
+	// hint. Worst realistic case: "999m·10d ago" ≈ 12 chars; we leave a
+	// 1-char breathing room and an extra cell of space-before so the
+	// title doesn't butt against the timestamps.
+	const whenCellW = 14
+	// Inner text area of the pane = width - 2 (padding). The title
+	// cell consumes everything that's left.
+	titleCellW := width - 2 - whenCellW
+	if titleCellW < 1 {
+		titleCellW = 1
 	}
 
 	// Detect cross-feed view: if any row carries a FeedName the loader is
@@ -36,7 +43,15 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	}
 	feedTagW := 0
 	if crossFeed {
-		feedTagW = 12 // room for "[feedname] "
+		feedTagW = 12 // room for "  feedname"
+	}
+
+	// Max length for truncating the title text: subtract the prefix
+	// "› " / "  " (2 cells), the star "★ " / "  " (2 cells) and the
+	// optional cross-feed tag from the title cell width.
+	titleTextBudget := titleCellW - 4 - feedTagW
+	if titleTextBudget < 1 {
+		titleTextBudget = 1
 	}
 
 	now := time.Now()
@@ -93,11 +108,7 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			star = lipgloss.NewStyle().Foreground(colorYellow).Render("★ ")
 		}
 
-		titleBudget := titleW - 2 - feedTagW
-		if titleBudget < 1 {
-			titleBudget = 1
-		}
-		titleText := titleStyle.Render(prefix+star) + titleStyle.Render(truncate(a.Title, titleBudget))
+		titleText := titleStyle.Render(prefix+star) + titleStyle.Render(truncate(a.Title, titleTextBudget))
 		if crossFeed && a.FeedName != "" {
 			tag := lipgloss.NewStyle().
 				Foreground(colorGreen).
@@ -116,8 +127,11 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			}
 		}
 
-		titleCellStyle := lipgloss.NewStyle().Width(width - 12)
-		whenCellStyle := lipgloss.NewStyle()
+		titleCellStyle := lipgloss.NewStyle().Width(titleCellW)
+		// Fix the right column width and right-align so timestamps sit
+		// flush to the pane's inner edge. Background covers the whole
+		// cell for the selected highlight.
+		whenCellStyle := lipgloss.NewStyle().Width(whenCellW).Align(lipgloss.Right)
 		if i == selected && active {
 			titleCellStyle = titleCellStyle.Background(colorAltBG)
 			whenCellStyle = whenCellStyle.Background(colorAltBG)
