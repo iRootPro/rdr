@@ -327,11 +327,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.FullArticle):
 			if m.focus == focusReader && m.readerArt != nil && m.readerArt.URL != "" && !m.fetching {
-				m.fetching = true
-				m.status = "loading full…"
+				tick := m.startBusy("loading full article…")
 				return m, tea.Batch(
 					fetchFullCmd(m.fetcher, m.db, m.readerArt.ID, m.readerArt.URL),
-					m.spin.Tick,
+					tick,
 				)
 			}
 			return m, nil
@@ -467,14 +466,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.fetching {
 				return m, nil
 			}
-			m.fetching = true
 			m.syncTotal = len(m.feeds)
+			label := "syncing…"
 			if m.syncTotal > 0 {
-				m.status = fmt.Sprintf("syncing %d feeds…", m.syncTotal)
-			} else {
-				m.status = "syncing…"
+				label = fmt.Sprintf("syncing %d feeds…", m.syncTotal)
 			}
-			return m, tea.Batch(fetchAllCmd(m.fetcher), m.spin.Tick)
+			tick := m.startBusy(label)
+			return m, tea.Batch(fetchAllCmd(m.fetcher), tick)
 		}
 
 	case spinner.TickMsg:
@@ -590,14 +588,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, tick)
 		}
 		if !m.fetching {
-			m.fetching = true
-			m.status = "auto-fetching…"
-			cmds = append(cmds, fetchAllCmd(m.fetcher), m.spin.Tick)
+			spinTick := m.startBusy("auto-fetching…")
+			cmds = append(cmds, fetchAllCmd(m.fetcher), spinTick)
 		}
 		return m, tea.Batch(cmds...)
 
 	case batchAppliedMsg:
 		m.err = nil
+		m.fetching = false
 		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
 		if c := m.loadCurrentCmd(); c != nil {
 			cmds = append(cmds, c)
@@ -613,6 +611,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case copiedMsg:
 		m.err = nil
+		m.fetching = false
 		return m, m.showToast(fmt.Sprintf("copied %d %s", msg.count, msg.format))
 
 	case articleMarkedMsg:
@@ -737,6 +736,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errMsg:
 		m.err = msg.err
+		// Clear the busy flag on any async failure so the spinner
+		// doesn't keep spinning after a failed batch/copy/scrape.
+		m.fetching = false
 		return m, nil
 	}
 	return m, nil
@@ -1062,6 +1064,11 @@ func (m Model) View() string {
 			readerMetaMuted.Render(" / ") +
 			truncate(m.readerArt.Title, titleBudget)
 		statusText := crumb
+		// Busy indicator replaces the breadcrumb so users see
+		// something is happening when f / batch ops are running.
+		if m.fetching {
+			statusText = m.spin.View() + " " + m.status
+		}
 		if m.toast != "" {
 			statusText = toastStyle.Render(" " + m.toast + " ")
 		}
@@ -1323,6 +1330,16 @@ func markFeedReadCmd(d *db.DB, feedID int64) tea.Cmd {
 		}
 		return feedMarkedReadMsg{feedID: feedID, count: n}
 	}
+}
+
+// startBusy sets the async-in-progress flag, stashes a human label in
+// m.status and returns the spinner tick to kick off rotation. Every
+// code path that runs a long tea.Cmd should funnel through this so
+// the status bar consistently shows feedback.
+func (m *Model) startBusy(label string) tea.Cmd {
+	m.fetching = true
+	m.status = label
+	return m.spin.Tick
 }
 
 // showToast overrides the status bar with a short-lived message. The

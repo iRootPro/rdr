@@ -344,27 +344,31 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 			m.err = fmt.Errorf(":read needs a query")
 			return m, nil
 		}
-		return m, batchApplyCmd(m.db, strings.Join(args, " "), "read")
+		tick := m.startBusy("marking read…")
+		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "read"), tick)
 
 	case "unread":
 		if len(args) == 0 {
 			m.err = fmt.Errorf(":unread needs a query")
 			return m, nil
 		}
-		return m, batchApplyCmd(m.db, strings.Join(args, " "), "unread")
+		tick := m.startBusy("marking unread…")
+		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "unread"), tick)
 
 	case "star":
 		if len(args) == 0 {
 			return m.toggleStarOnCurrent()
 		}
-		return m, batchApplyCmd(m.db, strings.Join(args, " "), "star")
+		tick := m.startBusy("starring…")
+		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "star"), tick)
 
 	case "unstar":
 		if len(args) == 0 {
 			m.err = fmt.Errorf(":unstar needs a query")
 			return m, nil
 		}
-		return m, batchApplyCmd(m.db, strings.Join(args, " "), "unstar")
+		tick := m.startBusy("unstarring…")
+		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "unstar"), tick)
 
 	case "copy":
 		if len(args) < 2 {
@@ -377,7 +381,8 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		query := strings.Join(args[1:], " ")
-		return m, batchCopyCmd(m.db, format, query)
+		tick := m.startBusy("copying…")
+		return m, tea.Batch(batchCopyCmd(m.db, format, query), tick)
 
 	case "import":
 		if len(args) == 0 {
