@@ -496,21 +496,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fetchDoneMsg:
 		m.fetching = false
 		m.feedErrors = map[int64]error{}
-		var failed int
+		var (
+			failed int
+			added  int
+		)
 		for _, r := range msg.results {
 			if r.Err != nil {
 				m.feedErrors[r.Feed.ID] = r.Err
 				failed++
 			}
+			added += r.Added
+		}
+		feedLabel := "feeds"
+		if len(msg.results) == 1 {
+			feedLabel = "feed"
+		}
+		artLabel := "new articles"
+		if added == 1 {
+			artLabel = "new article"
 		}
 		var toastMsg string
-		if failed > 0 {
-			toastMsg = fmt.Sprintf("synced %d · %d error(s)", len(msg.results), failed)
-			m.status = "ready"
-		} else {
-			toastMsg = fmt.Sprintf("synced %d feeds", len(msg.results))
-			m.status = "ready"
+		switch {
+		case failed > 0 && added > 0:
+			toastMsg = fmt.Sprintf("synced %d %s · %d %s · %d error(s)",
+				len(msg.results), feedLabel, added, artLabel, failed)
+		case failed > 0:
+			toastMsg = fmt.Sprintf("synced %d %s · %d error(s)",
+				len(msg.results), feedLabel, failed)
+		case added > 0:
+			toastMsg = fmt.Sprintf("synced %d %s · %d %s",
+				len(msg.results), feedLabel, added, artLabel)
+		default:
+			toastMsg = fmt.Sprintf("synced %d %s · nothing new",
+				len(msg.results), feedLabel)
 		}
+		m.status = "ready"
 		m.syncTotal = 0
 		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
 		if len(m.feeds) > 0 {
