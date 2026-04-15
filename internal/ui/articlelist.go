@@ -42,7 +42,16 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	now := time.Now()
 	groupStyle := lipgloss.NewStyle().Foreground(colorMuted).Italic(true)
 
-	start, end := visibleWindow(len(articles), selected, listVisibleRows(height))
+	rowsBudget := listVisibleRows(height)
+	// Worst case the visible window spans up to 4 date-group boundaries
+	// (Today/Yesterday/This week/This month/Older). Reserve a handful of
+	// rows up front so headers fit; unused rows are padded at the end.
+	itemBudget := rowsBudget - 2
+	if itemBudget < 1 {
+		itemBudget = 1
+	}
+
+	start, end := visibleWindow(len(articles), selected, itemBudget)
 	var lastBucket string
 	// Prime lastBucket with the row ABOVE the window so the first visible
 	// row still gets a header if it's the start of a bucket. When start==0
@@ -50,11 +59,19 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	if start > 0 {
 		lastBucket = dateBucket(articles[start-1].PublishedAt, now)
 	}
+	rowsUsed := 0
 	for i := start; i < end; i++ {
+		if rowsUsed >= rowsBudget {
+			break
+		}
 		bucket := dateBucket(articles[i].PublishedAt, now)
 		if bucket != lastBucket {
+			if rowsUsed+1 >= rowsBudget {
+				break
+			}
 			b.WriteString(groupStyle.Render("── " + bucket + " ──"))
 			b.WriteString("\n")
+			rowsUsed++
 			lastBucket = bucket
 		}
 		a := articles[i]
@@ -111,9 +128,14 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			whenCellStyle.Render(when),
 		)
 		b.WriteString(line)
-		if i < end-1 {
-			b.WriteString("\n")
-		}
+		b.WriteString("\n")
+		rowsUsed++
+	}
+
+	// Pad to the full budget so the pane's content height is constant.
+	for rowsUsed < rowsBudget {
+		b.WriteString("\n")
+		rowsUsed++
 	}
 
 	return framePane(b.String(), active, width, height)

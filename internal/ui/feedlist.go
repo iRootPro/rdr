@@ -53,7 +53,19 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 	}
 	showSeparator := hasFolder && firstFeedIdx > 0
 
-	start, end := visibleWindow(len(entries), selected, listVisibleRows(height))
+	rowsBudget := listVisibleRows(height)
+	// Reserve a row for the separator when we might draw one so the
+	// content height stays constant across folder↔feed navigation.
+	itemBudget := rowsBudget
+	if showSeparator {
+		itemBudget--
+	}
+	if itemBudget < 1 {
+		itemBudget = 1
+	}
+
+	start, end := visibleWindow(len(entries), selected, itemBudget)
+	rowsUsed := 0
 	for i := start; i < end; i++ {
 		e := entries[i]
 
@@ -63,6 +75,7 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 				Render(strings.Repeat("─", nameCellW+counterCol))
 			b.WriteString(sep)
 			b.WriteString("\n")
+			rowsUsed++
 		}
 
 		prefix := "  "
@@ -112,9 +125,16 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 
 		line := lipgloss.JoinHorizontal(lipgloss.Top, nameCell, counterCell)
 		b.WriteString(line)
-		if i < end-1 {
-			b.WriteString("\n")
-		}
+		b.WriteString("\n")
+		rowsUsed++
+	}
+
+	// Pad with blank lines to keep the content height stable regardless
+	// of how many items / separators rendered. Prevents layout jumps
+	// around the folder/feed boundary.
+	for rowsUsed < rowsBudget {
+		b.WriteString("\n")
+		rowsUsed++
 	}
 
 	return framePane(b.String(), active, width, height)
