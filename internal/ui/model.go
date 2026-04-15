@@ -316,6 +316,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.Star):
 			return m.toggleStarOnCurrent()
+		case key.Matches(msg, m.keys.FilterAll):
+			return m.switchFilter(filterAll)
+		case key.Matches(msg, m.keys.FilterUnread):
+			return m.switchFilter(filterUnread)
+		case key.Matches(msg, m.keys.FilterStarred):
+			return m.switchFilter(filterStarred)
 		case key.Matches(msg, m.keys.NextUnread):
 			return m.jumpToNextUnread()
 		case key.Matches(msg, m.keys.Command):
@@ -1363,6 +1369,25 @@ func (m *Model) showToast(text string) tea.Cmd {
 	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 		return toastExpiredMsg{id: id}
 	})
+}
+
+// switchFilter changes the article filter. If the user is already in the
+// target mode it's a no-op (no toast, no reload), otherwise the current
+// selection's article list is refetched and a toast confirms the switch.
+func (m Model) switchFilter(target articleFilter) (tea.Model, tea.Cmd) {
+	if m.filter == target {
+		return m, nil
+	}
+	m.filter = target
+	m.selArt = 0
+	label := "showing " + filterLabel(target)
+	cmds := []tea.Cmd{m.showToast(label)}
+	if len(m.feeds) > 0 {
+		if c := m.loadCurrentCmd(); c != nil {
+			cmds = append(cmds, c)
+		}
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // toggleStarOnCurrent toggles the starred flag for the article under the
