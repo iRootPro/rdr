@@ -132,6 +132,26 @@ func TestReadingTime_FallsBackToContent(t *testing.T) {
 	}
 }
 
+func TestReadingMinutes_SkipsStubs(t *testing.T) {
+	if got := readingMinutes("short body"); got != 0 {
+		t.Fatalf("short body should return 0 minutes, got %d", got)
+	}
+	if got := readingMinutes(""); got != 0 {
+		t.Fatalf("empty body should return 0 minutes, got %d", got)
+	}
+}
+
+func TestReadingMinutes_RoundsUp(t *testing.T) {
+	// 250 words → ceil(250/200) = 2
+	words := make([]string, 250)
+	for i := range words {
+		words[i] = "w"
+	}
+	if got := readingMinutes(strings.Join(words, " ")); got != 2 {
+		t.Fatalf("250 words: want 2 min, got %d", got)
+	}
+}
+
 func TestDateBucket_TodayYesterdayEtc(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	cases := []struct {

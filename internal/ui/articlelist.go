@@ -89,6 +89,15 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		}
 		title := titleText
 		when := timeAgoStyle.Render(timeAgo(a.PublishedAt))
+		// Prepend a small reading-time hint when the body is cached.
+		if a.CachedBody != "" {
+			if mins := readingMinutes(a.CachedBody); mins > 0 {
+				hint := lipgloss.NewStyle().
+					Foreground(colorMuted).
+					Render(fmt.Sprintf("%dm·", mins))
+				when = hint + when
+			}
+		}
 
 		titleCellStyle := lipgloss.NewStyle().Width(width - 12)
 		whenCellStyle := lipgloss.NewStyle()
@@ -108,6 +117,22 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	}
 
 	return framePane(b.String(), active, width, height)
+}
+
+// readingMinutes returns the estimated read time in whole minutes for a
+// chunk of article text. Returns 0 for stubs too short to be meaningful
+// (<20 words) so the article list doesn't show "1m·" everywhere.
+func readingMinutes(body string) int {
+	text := stripHTML(body)
+	words := len(strings.Fields(text))
+	if words < 20 {
+		return 0
+	}
+	mins := (words + 199) / 200
+	if mins < 1 {
+		mins = 1
+	}
+	return mins
 }
 
 // dateBucket labels an article by how recent it is, for the group headers
