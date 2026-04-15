@@ -645,15 +645,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updateRead(m.readerArt)
 		}
 		m.refreshFolderCounts()
+		label := "marked read"
 		if msg.unread {
-			m.status = "marked unread"
-		} else {
-			m.status = "marked read"
+			label = "marked unread"
 		}
 		// Refresh the feed list so unread counters update. The current
 		// article list stays as-is (we already patched it) unless the
 		// user is on filter=unread, where the row should disappear.
-		cmds := []tea.Cmd{loadFeedsCmd(m.db)}
+		cmds := []tea.Cmd{loadFeedsCmd(m.db), m.showToast(label)}
 		if m.filter == filterUnread && !msg.unread && len(m.feeds) > 0 {
 			cmds = append(cmds, m.loadCurrentCmd())
 		}
@@ -724,17 +723,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.refreshFolderCounts()
-		if msg.starred {
-			m.status = "starred"
-		} else {
-			m.status = "unstarred"
+		label := "★ starred"
+		if !msg.starred {
+			label = "unstarred"
 		}
+		cmds := []tea.Cmd{m.showToast(label)}
 		// If viewing the starred filter and we just unstarred, reload so the
 		// row falls out of the list.
 		if m.filter == filterStarred && !msg.starred && len(m.feeds) > 0 {
-			return m, m.loadCurrentCmd()
+			cmds = append(cmds, m.loadCurrentCmd())
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case errMsg:
 		m.err = msg.err
