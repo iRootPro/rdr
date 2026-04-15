@@ -38,24 +38,25 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		nameCellW = 1
 	}
 
-	// Find the first feed entry index so we can insert a visual separator
-	// between folders and feeds. -1 means no feeds (don't render separator)
-	// or no folders (also skip).
-	firstFeedIdx := -1
+	// Visual break: a subtle separator sits between the smart-folders
+	// section and the first category (or the first uncategorised feed
+	// when there are no categories). That groups the pane into two
+	// obvious sections without adding noise inside either.
+	firstBreakIdx := -1
 	hasFolder := false
 	for i, e := range entries {
 		if e.Kind == entryFolder {
 			hasFolder = true
+			continue
 		}
-		if e.Kind == entryFeed && firstFeedIdx < 0 {
-			firstFeedIdx = i
+		if firstBreakIdx < 0 {
+			firstBreakIdx = i
+			break
 		}
 	}
-	showSeparator := hasFolder && firstFeedIdx > 0
+	showSeparator := hasFolder && firstBreakIdx > 0
 
 	rowsBudget := listVisibleRows(height)
-	// Reserve a row for the separator when we might draw one so the
-	// content height stays constant across folder↔feed navigation.
 	itemBudget := rowsBudget
 	if showSeparator {
 		itemBudget--
@@ -69,7 +70,7 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 	for i := start; i < end; i++ {
 		e := entries[i]
 
-		if showSeparator && i == firstFeedIdx {
+		if showSeparator && i == firstBreakIdx {
 			sep := lipgloss.NewStyle().
 				Foreground(colorBorder).
 				Render(strings.Repeat("─", nameCellW+counterCol))
@@ -100,19 +101,22 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 			if e.Collapsed {
 				marker = "▶ "
 			}
-			icon = lipgloss.NewStyle().Foreground(colorMuted).Bold(true).Render(marker)
+			icon = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(marker)
 			iconCells = 2
-			// Category headers use a different name style so they read
-			// like section headers rather than list items.
+			// Category headers read as section labels — accent + bold
+			// sets them apart from the regular feed rows below.
 			if i != selected {
-				nameStyle = lipgloss.NewStyle().Foreground(colorMuted).Bold(true)
+				nameStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 			}
 		case entryFeed:
-			// Feeds live under a category — indent slightly for hierarchy.
-			icon = "  "
-			iconCells = 2
+			// Feeds are children of the category above them. Use a 4-cell
+			// indent instead of the 2-cell one used by folders/categories
+			// so the parent/child relationship is visually obvious.
+			icon = "    "
+			iconCells = 4
 			if e.HasError {
-				icon = errStyle.Render("● ")
+				icon = errStyle.Render("  ● ")
+				iconCells = 4
 			}
 		}
 
