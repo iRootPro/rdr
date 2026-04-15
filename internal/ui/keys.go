@@ -27,6 +27,9 @@ type keyMap struct {
 	Zen           key.Binding
 	Command       key.Binding
 	Star          key.Binding
+	FilterAll     key.Binding
+	FilterUnread  key.Binding
+	FilterStarred key.Binding
 	NextArticle   key.Binding
 	PrevArticle   key.Binding
 	LinkPicker    key.Binding
@@ -63,6 +66,9 @@ func defaultKeys() keyMap {
 		Zen:           key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zen")),
 		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "command")),
 		Star:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "toggle star")),
+		FilterAll:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all articles")),
+		FilterUnread:  key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "unread only")),
+		FilterStarred: key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "starred only")),
 		NextArticle:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next article")),
 		PrevArticle:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev article")),
 		LinkPicker:    key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "links")),
@@ -103,9 +109,9 @@ type helpSection struct {
 func shortHelpFor(f focus, k keyMap) []key.Binding {
 	switch f {
 	case focusFeeds:
-		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleFold, k.Search, k.Command, k.Help, k.Quit}
+		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleFold, k.FilterUnread, k.FilterStarred, k.Search, k.Command, k.Help, k.Quit}
 	case focusArticles:
-		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Star, k.NextUnread, k.Search, k.Help, k.Quit}
+		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Star, k.NextUnread, k.FilterUnread, k.FilterStarred, k.Search, k.Help, k.Quit}
 	case focusReader:
 		return []key.Binding{k.Up, k.Down, k.NextArticle, k.PrevArticle, k.FullArticle, k.LinkPicker, k.OpenURL, k.YankURL, k.Star, k.Back, k.Help}
 	case focusSettings:
@@ -160,10 +166,17 @@ func fullHelpFor(f focus) []helpSection {
 				{"m", "toggle star"},
 				{"y / Y", "yank URL / [title](url)"},
 				{"o", "open in browser"},
-				{"1 2 3", "filter all / unread / starred (via :filter)"},
 			},
 		}
-		return []helpSection{nav, article, global}
+		filters := helpSection{
+			Title: "Filters",
+			Entries: []helpEntry{
+				{"a", "show all articles"},
+				{"u", "show unread only"},
+				{"S", "show starred only"},
+			},
+		}
+		return []helpSection{nav, article, filters, global}
 
 	case focusReader:
 		nav := helpSection{
