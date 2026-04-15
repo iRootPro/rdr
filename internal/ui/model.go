@@ -139,6 +139,11 @@ type Model struct {
 	links    []articleLink
 	linksSel int
 
+	// Toast notifications: a short-lived status chip for batch ops.
+	toast     string
+	toastID   int
+	syncTotal int
+
 	commandInput   textinput.Model
 	commandPrev    focus
 	commandSuggIdx int
@@ -453,7 +458,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.fetching = true
-			m.status = "fetching…"
+			m.syncTotal = len(m.feeds)
+			if m.syncTotal > 0 {
+				m.status = fmt.Sprintf("syncing %d feeds…", m.syncTotal)
+			} else {
+				m.status = "syncing…"
+			}
 			return m, tea.Batch(fetchAllCmd(m.fetcher), m.spin.Tick)
 		}
 
@@ -475,11 +485,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				failed++
 			}
 		}
+		var toastMsg string
 		if failed > 0 {
-			m.status = fmt.Sprintf("fetched · %d error(s)", failed)
+			toastMsg = fmt.Sprintf("synced %d · %d error(s)", len(msg.results), failed)
+			m.status = "ready"
 		} else {
-			m.status = "fetched"
+			toastMsg = fmt.Sprintf("synced %d feeds", len(msg.results))
+			m.status = "ready"
 		}
+		m.syncTotal = 0
 		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
 		if len(m.feeds) > 0 {
 			cmds = append(cmds, m.loadCurrentCmd())
@@ -498,6 +512,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		}
+		cmds = append(cmds, m.showToast(toastMsg))
 		return m, tea.Batch(cmds...)
 
 	case feedsLoadedMsg:
@@ -561,14 +576,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case batchAppliedMsg:
 		m.err = nil
-		m.status = fmt.Sprintf("%s · %d articles", msg.action, msg.count)
-		// Refresh feed list (unread counts), current selection's article
-		// list, and the cross-feed cache for folder counts.
 		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
 		if c := m.loadCurrentCmd(); c != nil {
 			cmds = append(cmds, c)
 		}
+		cmds = append(cmds, m.showToast(fmt.Sprintf("%s · %d articles", msg.action, msg.count)))
 		return m, tea.Batch(cmds...)
+
+	case toastExpiredMsg:
+		if msg.id == m.toastID {
+			m.toast = ""
+		}
+		return m, nil
 
 	case articleMarkedMsg:
 		m.err = nil
@@ -616,12 +635,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case feedMarkedReadMsg:
 		m.err = nil
-		m.status = fmt.Sprintf("marked %d read", msg.count)
-		// Reload feeds (counters), cache (folder counts), and current list.
 		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
 		if c := m.loadCurrentCmd(); c != nil {
 			cmds = append(cmds, c)
 		}
+		cmds = append(cmds, m.showToast(fmt.Sprintf("marked %d read", msg.count)))
 		return m, tea.Batch(cmds...)
 
 	case fullArticleLoadedMsg:
@@ -978,7 +996,20 @@ func (m Model) View() string {
 	}
 
 	if m.focus == focusReader && m.readerArt != nil {
-		statusText := "rdr · reader"
+		// Breadcrumb: "FeedName / Truncated title" replaces the flat
+		// "rdr · reader" so you always know what you're looking at.
+		feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
+		titleBudget := m.width - lipgloss.Width(feedName) - 12
+		if titleBudget < 10 {
+			titleBudget = 10
+		}
+		crumb := readerSource.Render(feedName) +
+			readerMetaMuted.Render(" / ") +
+			truncate(m.readerArt.Title, titleBudget)
+		statusText := crumb
+		if m.toast != "" {
+			statusText = toastStyle.Render(" " + m.toast + " ")
+		}
 		if m.err != nil {
 			statusText += "  " + errStyle.Render("! "+m.err.Error())
 		}
@@ -1034,9 +1065,12 @@ func (m Model) View() string {
 		return lipgloss.JoinVertical(lipgloss.Top, row, popup, cmdLine, helpView)
 	}
 
-	var status string
-	{
-		statusText := "rdr · " + m.status
+	var statusText string
+	if m.toast != "" {
+		// Toast replaces the normal status line for its ~2s lifetime.
+		statusText = toastStyle.Render(" " + m.toast + " ")
+	} else {
+		statusText = "rdr · " + m.status
 		if m.fetching {
 			statusText = "rdr · " + m.spin.View() + " " + m.status
 		}
@@ -1051,11 +1085,11 @@ func (m Model) View() string {
 		if m.zenMode {
 			statusText += " " + searchCount.Render("[zen]")
 		}
-		if m.err != nil {
-			statusText += "  " + errStyle.Render("! "+m.err.Error())
-		}
-		status = statusBar.Width(m.width).Render(statusText)
 	}
+	if m.err != nil {
+		statusText += "  " + errStyle.Render("! "+m.err.Error())
+	}
+	status := statusBar.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Top, row, status, helpView)
 }
@@ -1122,6 +1156,18 @@ func markFeedReadCmd(d *db.DB, feedID int64) tea.Cmd {
 		}
 		return feedMarkedReadMsg{feedID: feedID, count: n}
 	}
+}
+
+// showToast overrides the status bar with a short-lived message. The
+// returned Cmd schedules a tea.Tick after 2s to clear it (if no newer
+// toast has replaced it). Mutates m in place via pointer receiver.
+func (m *Model) showToast(text string) tea.Cmd {
+	m.toastID++
+	m.toast = text
+	id := m.toastID
+	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+		return toastExpiredMsg{id: id}
+	})
 }
 
 // toggleStarOnCurrent toggles the starred flag for the article under the

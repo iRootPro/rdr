@@ -32,6 +32,14 @@ var (
 	// colour shift.
 	selectedRow = lipgloss.NewStyle().Background(colorAltBG)
 
+	// toastStyle is the chip used for short-lived batch-op notifications
+	// that briefly replace the status bar text. Accent background + bold
+	// white foreground for high visibility over ~2 seconds.
+	toastStyle = lipgloss.NewStyle().
+			Background(colorAccent).
+			Foreground(colorBG).
+			Bold(true)
+
 	paneTitle = lipgloss.NewStyle().
 			Foreground(colorAccent).
 			Bold(true).

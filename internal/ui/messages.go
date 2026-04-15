@@ -60,6 +60,13 @@ type batchAppliedMsg struct {
 // auto-sync. The handler re-arms the timer after kicking off a fetch.
 type refreshTickMsg struct{}
 
+// toastExpiredMsg is delivered 2s after a toast is shown. The handler
+// only clears the toast if the id still matches the currently visible
+// one — otherwise a newer toast has replaced it and we leave it alone.
+type toastExpiredMsg struct {
+	id int
+}
+
 type errMsg struct {
 	err error
 }
