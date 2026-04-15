@@ -95,10 +95,24 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		case entryFolder:
 			icon = lipgloss.NewStyle().Foreground(colorTeal).Render("◉ ")
 			iconCells = 2
+		case entryCategory:
+			marker := "▼ "
+			if e.Collapsed {
+				marker = "▶ "
+			}
+			icon = lipgloss.NewStyle().Foreground(colorMuted).Bold(true).Render(marker)
+			iconCells = 2
+			// Category headers use a different name style so they read
+			// like section headers rather than list items.
+			if i != selected {
+				nameStyle = lipgloss.NewStyle().Foreground(colorMuted).Bold(true)
+			}
 		case entryFeed:
+			// Feeds live under a category — indent slightly for hierarchy.
+			icon = "  "
+			iconCells = 2
 			if e.HasError {
 				icon = errStyle.Render("● ")
-				iconCells = 2
 			}
 		}
 

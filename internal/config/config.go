@@ -20,8 +20,9 @@ type Config struct {
 }
 
 type FeedEntry struct {
-	Name string `yaml:"name"`
-	URL  string `yaml:"url"`
+	Name     string `yaml:"name"`
+	URL      string `yaml:"url"`
+	Category string `yaml:"category,omitempty"`
 }
 
 // SmartFolder is a saved query that appears as a virtual folder in the feed

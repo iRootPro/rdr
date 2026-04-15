@@ -14,7 +14,7 @@ func Sync(d *db.DB, cfg *Config) error {
 		return nil
 	}
 	for _, e := range cfg.Feeds {
-		if _, err := d.UpsertFeed(e.Name, e.URL); err != nil {
+		if _, err := d.UpsertFeed(e.Name, e.URL, e.Category); err != nil {
 			return fmt.Errorf("sync feed %q: %w", e.URL, err)
 		}
 	}

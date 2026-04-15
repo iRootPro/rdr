@@ -19,16 +19,18 @@ import (
 	"github.com/iRootPro/rdr/internal/feed"
 )
 
-// entryKind tags a row in the unified feed list: smart folder or plain feed.
+// entryKind tags a row in the unified feed list: smart folder, category
+// header, or a plain feed grouped under its category.
 type entryKind int
 
 const (
 	entryFolder entryKind = iota
+	entryCategory
 	entryFeed
 )
 
-// feedEntry is a single row in the Feeds pane. It may be either a smart
-// folder (virtual, query-backed) or a regular feed pulled from the DB.
+// feedEntry is a single row in the Feeds pane. May be a smart folder
+// (query-backed virtual), a category header, or a feed under a category.
 type feedEntry struct {
 	Kind entryKind
 
@@ -39,6 +41,10 @@ type feedEntry struct {
 
 	// Folder-only:
 	FolderIdx int // index into m.smartFolders
+
+	// Category-only:
+	CategoryFeedIDs []int64
+	Collapsed       bool
 
 	// Shared:
 	Name string
@@ -139,6 +145,9 @@ type Model struct {
 	links    []articleLink
 	linksSel int
 
+	// Category collapse state keyed by raw category name ("" for Other).
+	collapsedCats map[string]bool
+
 	// Toast notifications: a short-lived status chip for batch ops.
 	toast     string
 	toastID   int
@@ -203,6 +212,7 @@ func New(database *db.DB, fetcher *feed.Fetcher, smartFolders []config.SmartFold
 		reader:        viewport.New(0, 0),
 		help:          h,
 		feedErrors:        map[int64]error{},
+		collapsedCats:     readCollapsedCats(home),
 		smartFolders:      smartFolders,
 		afterSyncCommands: afterSyncCommands,
 		refreshInterval:   time.Duration(refreshIntervalMinutes) * time.Minute,
@@ -373,9 +383,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.readerJump(-1)
 			}
 			return m, nil
-		case msg.String() == " ":
-			// Space as page-down in reader (classic less/more convention).
-			if m.focus == focusReader {
+		case key.Matches(msg, m.keys.ToggleFold):
+			// Space toggles category fold in the feeds pane, acts as
+			// page-down inside the reader, and is a no-op elsewhere.
+			switch m.focus {
+			case focusFeeds:
+				return m.toggleCategoryFold()
+			case focusReader:
 				pgDown := tea.KeyMsg{Type: tea.KeyPgDown}
 				var cmd tea.Cmd
 				m.reader, cmd = m.reader.Update(pgDown)
@@ -542,6 +556,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		e, ok := m.currentEntry()
 		if ok && e.Kind == entryFolder && e.FolderIdx == msg.folderIdx {
+			m.articles = msg.articles
+			applySort(m.articles, m.sortField, m.sortReverse)
+			if m.selArt >= len(m.articles) {
+				m.selArt = 0
+			}
+		}
+		return m, nil
+
+	case categoryArticlesLoadedMsg:
+		m.err = nil
+		e, ok := m.currentEntry()
+		if ok && e.Kind == entryCategory && e.Name == msg.name {
 			m.articles = msg.articles
 			applySort(m.articles, m.sortField, m.sortReverse)
 			if m.selArt >= len(m.articles) {
@@ -804,7 +830,7 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsInput.SetValue("")
 		return m, textinput.Blink
 	case smAddURL:
-		if _, err := m.db.UpsertFeed(m.pendingName, value); err != nil {
+		if _, err := m.db.UpsertFeed(m.pendingName, value, ""); err != nil {
 			m.err = err
 			return m, nil
 		}
@@ -1150,6 +1176,62 @@ func (m *Model) consumeCount() int {
 	return c
 }
 
+// toggleCategoryFold collapses or expands the category under the cursor.
+// If the cursor is on a feed row, its parent category is folded instead,
+// so power users can collapse from inside a group without scrolling up.
+func (m Model) toggleCategoryFold() (tea.Model, tea.Cmd) {
+	es := m.entries()
+	if m.selEntry < 0 || m.selEntry >= len(es) {
+		return m, nil
+	}
+	targetKey := ""
+	switch es[m.selEntry].Kind {
+	case entryCategory:
+		// Look up the raw key for this header via the feeds it owns.
+		targetKey = m.categoryKeyFromEntry(es[m.selEntry])
+	case entryFeed:
+		// Find the parent category by scanning backwards.
+		for i := m.selEntry - 1; i >= 0; i-- {
+			if es[i].Kind == entryCategory {
+				targetKey = m.categoryKeyFromEntry(es[i])
+				// Move selection to the header before collapsing so the
+				// user doesn't fall out of view.
+				m.selEntry = i
+				break
+			}
+		}
+	default:
+		return m, nil
+	}
+	if m.collapsedCats == nil {
+		m.collapsedCats = map[string]bool{}
+	}
+	m.collapsedCats[targetKey] = !m.collapsedCats[targetKey]
+	writeCollapsedCats(m.home, m.collapsedCats)
+	return m, nil
+}
+
+// categoryKeyFromEntry returns the raw category string (possibly empty
+// for "Other") given a rendered entryCategory. We look up a feed id to
+// recover the original value since the display name may be "Other".
+func (m Model) categoryKeyFromEntry(e feedEntry) string {
+	if e.Kind != entryCategory || len(e.CategoryFeedIDs) == 0 {
+		// Best-effort fallback: the header name is the key except when
+		// it's "Other" which maps to "".
+		if e.Name == "Other" {
+			return ""
+		}
+		return e.Name
+	}
+	id := e.CategoryFeedIDs[0]
+	for _, f := range m.feeds {
+		if f.ID == id {
+			return f.Category
+		}
+	}
+	return ""
+}
+
 // yankCurrent copies the selected article's URL to the system clipboard
 // via OSC 52. If markdown is true, it copies a `[title](url)` link
 // instead. Works from the articles list or the reader.
@@ -1319,11 +1401,12 @@ func (m Model) jumpToNextUnread() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// entries returns the unified feed list: smart folders first, then regular
-// feeds. Indices are stable within a single Update/View pair. Folder match
-// counts come from m.folderCounts (populated by refreshFolderCounts).
+// entries returns the unified feed list: smart folders first, then
+// category headers followed by their feeds. Collapsed categories hide
+// their feeds but keep the header visible. "Other" (empty category
+// string) is pinned to the bottom.
 func (m Model) entries() []feedEntry {
-	out := make([]feedEntry, 0, len(m.smartFolders)+len(m.feeds))
+	out := make([]feedEntry, 0, len(m.smartFolders)+len(m.feeds)+8)
 	for i, f := range m.smartFolders {
 		count := 0
 		if i < len(m.folderCounts) {
@@ -1336,15 +1419,62 @@ func (m Model) entries() []feedEntry {
 			UnreadCount: count,
 		})
 	}
+
+	// Bucket feeds by category preserving first-seen order.
+	type group struct {
+		feeds []db.Feed
+	}
+	var order []string
+	groups := make(map[string]*group)
 	for _, f := range m.feeds {
-		_, hasErr := m.feedErrors[f.ID]
+		if _, ok := groups[f.Category]; !ok {
+			groups[f.Category] = &group{}
+			order = append(order, f.Category)
+		}
+		groups[f.Category].feeds = append(groups[f.Category].feeds, f)
+	}
+	// Pin the empty category to the bottom as "Other".
+	for i, k := range order {
+		if k == "" {
+			order = append(order[:i], order[i+1:]...)
+			order = append(order, "")
+			break
+		}
+	}
+
+	for _, key := range order {
+		g := groups[key]
+		displayName := key
+		if displayName == "" {
+			displayName = "Other"
+		}
+		ids := make([]int64, 0, len(g.feeds))
+		unreadTotal := 0
+		for _, f := range g.feeds {
+			ids = append(ids, f.ID)
+			unreadTotal += f.UnreadCount
+		}
+		collapsed := m.collapsedCats[key]
 		out = append(out, feedEntry{
-			Kind:        entryFeed,
-			Name:        f.Name,
-			FeedID:      f.ID,
-			UnreadCount: f.UnreadCount,
-			HasError:    hasErr,
+			Kind:            entryCategory,
+			Name:            displayName,
+			CategoryFeedIDs: ids,
+			Collapsed:       collapsed,
+			UnreadCount:     unreadTotal,
 		})
+		if collapsed {
+			continue
+		}
+		for _, f := range g.feeds {
+			_, hasErr := m.feedErrors[f.ID]
+			out = append(out, feedEntry{
+				Kind:        entryFeed,
+				Name:        f.Name,
+				FeedID:      f.ID,
+				UnreadCount: f.UnreadCount,
+				HasError:    hasErr,
+			})
+		}
 	}
 	return out
 }
@@ -1401,14 +1531,17 @@ func (m Model) currentEntry() (feedEntry, bool) {
 }
 
 // loadCurrentCmd returns the load command appropriate for whatever is
-// currently selected — folder or feed. Returns nil if nothing is loadable.
+// currently selected — folder, category, or plain feed.
 func (m Model) loadCurrentCmd() tea.Cmd {
 	e, ok := m.currentEntry()
 	if !ok {
 		return nil
 	}
-	if e.Kind == entryFolder {
+	switch e.Kind {
+	case entryFolder:
 		return loadFolderArticlesCmd(m.db, e.FolderIdx, m.smartFolders[e.FolderIdx].Query)
+	case entryCategory:
+		return loadCategoryArticlesCmd(m.db, e.Name, e.CategoryFeedIDs)
 	}
 	return loadArticlesCmd(m.db, e.FeedID, m.filter)
 }
@@ -1437,6 +1570,29 @@ func loadArticlesCmd(d *db.DB, feedID int64, filter articleFilter) tea.Cmd {
 			return errMsg{err}
 		}
 		return articlesLoadedMsg{feedID: feedID, articles: articles}
+	}
+}
+
+// loadCategoryArticlesCmd loads articles belonging to the feeds of a
+// category. Uses ListAllArticles (cross-feed cache SQL) and filters in
+// memory to a feed-id set — no new DB method required.
+func loadCategoryArticlesCmd(d *db.DB, name string, feedIDs []int64) tea.Cmd {
+	return func() tea.Msg {
+		all, err := d.ListAllArticles(2000)
+		if err != nil {
+			return errMsg{err}
+		}
+		idSet := make(map[int64]bool, len(feedIDs))
+		for _, id := range feedIDs {
+			idSet[id] = true
+		}
+		out := make([]db.Article, 0, len(all))
+		for _, a := range all {
+			if idSet[a.FeedID] {
+				out = append(out, a)
+			}
+		}
+		return categoryArticlesLoadedMsg{name: name, articles: out}
 	}
 }
 

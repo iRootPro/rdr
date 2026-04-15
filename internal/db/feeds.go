@@ -11,12 +11,15 @@ type Feed struct {
 	ID          int64
 	Name        string
 	URL         string
+	Category    string
 	Position    int
 	CreatedAt   time.Time
 	UnreadCount int
 }
 
-func (d *DB) UpsertFeed(name, url string) (Feed, error) {
+// UpsertFeed inserts or updates a feed by URL. Category is overwritten
+// on conflict so yaml edits take effect on next sync.
+func (d *DB) UpsertFeed(name, url, category string) (Feed, error) {
 	tx, err := d.sql.Begin()
 	if err != nil {
 		return Feed{}, err
@@ -31,19 +34,21 @@ func (d *DB) UpsertFeed(name, url string) (Feed, error) {
 	}
 
 	_, err = tx.Exec(`
-		INSERT INTO feeds (name, url, position) VALUES (?, ?, ?)
-		ON CONFLICT(url) DO UPDATE SET name = excluded.name
-	`, name, url, nextPos)
+		INSERT INTO feeds (name, url, category, position) VALUES (?, ?, ?, ?)
+		ON CONFLICT(url) DO UPDATE SET
+			name = excluded.name,
+			category = excluded.category
+	`, name, url, category, nextPos)
 	if err != nil {
 		return Feed{}, fmt.Errorf("upsert: %w", err)
 	}
 
 	var f Feed
 	row := tx.QueryRow(`
-		SELECT id, name, url, position, created_at
+		SELECT id, name, url, category, position, created_at
 		FROM feeds WHERE url = ?
 	`, url)
-	if err := row.Scan(&f.ID, &f.Name, &f.URL, &f.Position, &f.CreatedAt); err != nil {
+	if err := row.Scan(&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt); err != nil {
 		return Feed{}, fmt.Errorf("read back: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -54,7 +59,7 @@ func (d *DB) UpsertFeed(name, url string) (Feed, error) {
 
 func (d *DB) ListFeeds() ([]Feed, error) {
 	rows, err := d.sql.Query(`
-		SELECT f.id, f.name, f.url, f.position, f.created_at,
+		SELECT f.id, f.name, f.url, f.category, f.position, f.created_at,
 		       COUNT(CASE WHEN a.id IS NOT NULL AND a.read_at IS NULL THEN 1 END)
 		FROM feeds f
 		LEFT JOIN articles a ON a.feed_id = f.id
@@ -70,7 +75,7 @@ func (d *DB) ListFeeds() ([]Feed, error) {
 	for rows.Next() {
 		var f Feed
 		if err := rows.Scan(
-			&f.ID, &f.Name, &f.URL, &f.Position, &f.CreatedAt, &f.UnreadCount,
+			&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt, &f.UnreadCount,
 		); err != nil {
 			return nil, err
 		}
@@ -82,9 +87,9 @@ func (d *DB) ListFeeds() ([]Feed, error) {
 func (d *DB) GetFeedByURL(url string) (*Feed, error) {
 	var f Feed
 	err := d.sql.QueryRow(`
-		SELECT id, name, url, position, created_at
+		SELECT id, name, url, category, position, created_at
 		FROM feeds WHERE url = ?
-	`, url).Scan(&f.ID, &f.Name, &f.URL, &f.Position, &f.CreatedAt)
+	`, url).Scan(&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -101,5 +106,12 @@ func (d *DB) DeleteFeed(id int64) error {
 
 func (d *DB) RenameFeed(id int64, name string) error {
 	_, err := d.sql.Exec(`UPDATE feeds SET name = ? WHERE id = ?`, name, id)
+	return err
+}
+
+// SetFeedCategory moves a feed into (or out of) a category. Empty
+// string means "uncategorized". Used by :categorymove command.
+func (d *DB) SetFeedCategory(id int64, category string) error {
+	_, err := d.sql.Exec(`UPDATE feeds SET category = ? WHERE id = ?`, category, id)
 	return err
 }
