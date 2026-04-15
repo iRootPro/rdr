@@ -76,7 +76,7 @@ func TestRenderReaderBody_TruncatesLongURL(t *testing.T) {
 }
 
 func TestRenderEmptyReader_ContainsCTABox(t *testing.T) {
-	a := db.Article{Title: "Empty", URL: "https://x", PublishedAt: time.Now()} // no CachedBody
+	a := db.Article{Title: "Empty", URL: "https://x", PublishedAt: time.Now()} // no CachedBody, no description
 	out := renderReaderBody(a, "F", 70, false)
 	if !strings.Contains(out, "Press [f]") {
 		t.Fatalf("empty state should prompt with Press [f], got:\n%s", out)
@@ -84,6 +84,82 @@ func TestRenderEmptyReader_ContainsCTABox(t *testing.T) {
 	// Rounded border corners should appear in the rendered box.
 	if !strings.Contains(out, "╭") || !strings.Contains(out, "╰") {
 		t.Fatalf("expected rounded border characters, got:\n%s", out)
+	}
+}
+
+func TestRenderReaderBody_DescriptionRenderedAsPreview(t *testing.T) {
+	// 30+ word description should be rendered as body with a subtle
+	// footer hint instead of the big empty-state card.
+	words := make([]string, 40)
+	for i := range words {
+		words[i] = "word"
+	}
+	a := db.Article{
+		Title:       "Habr article",
+		PublishedAt: time.Now(),
+		Description: strings.Join(words, " "),
+	}
+	out := renderReaderBody(a, "Habr", 70, false)
+	// No rounded border box for description-only case.
+	if strings.Contains(out, "╭") {
+		t.Fatalf("description preview should not show empty-state box, got:\n%s", out)
+	}
+	// Footer hint should be present, inline not in a box.
+	if !strings.Contains(out, "Press [f]") {
+		t.Fatalf("expected inline footer hint, got:\n%s", out)
+	}
+	if !strings.Contains(out, "full article") {
+		t.Fatalf("expected 'full article' in footer, got:\n%s", out)
+	}
+	// At least some of the description words should land in the output.
+	if !strings.Contains(out, "word") {
+		t.Fatalf("description text should be rendered, got:\n%s", out)
+	}
+}
+
+func TestRenderReaderBody_EmptyStubStillShowsCard(t *testing.T) {
+	// Short HN-style stub (<20 words) should keep the empty-state card.
+	a := db.Article{
+		Title:       "HN Item",
+		URL:         "https://example.com",
+		PublishedAt: time.Now(),
+		Content:     "Article URL: https://example.com Points: 17",
+	}
+	out := renderReaderBody(a, "HN", 70, false)
+	if !strings.Contains(out, "╭") {
+		t.Fatalf("short stub should show empty-state box, got:\n%s", out)
+	}
+}
+
+func TestHasReadablePreview_ShortStubReturnsFalse(t *testing.T) {
+	a := db.Article{Description: "Short blurb"}
+	if hasReadablePreview(a) {
+		t.Fatal("short blurb should not count as readable preview")
+	}
+}
+
+func TestHasReadablePreview_LongDescriptionReturnsTrue(t *testing.T) {
+	words := make([]string, 30)
+	for i := range words {
+		words[i] = "w"
+	}
+	a := db.Article{Description: strings.Join(words, " ")}
+	if !hasReadablePreview(a) {
+		t.Fatal("long description should count as readable preview")
+	}
+}
+
+func TestArticlePreviewText_PrefersContent(t *testing.T) {
+	a := db.Article{Content: "long content", Description: "short desc"}
+	if got := articlePreviewText(a); got != "long content" {
+		t.Fatalf("want content, got %q", got)
+	}
+}
+
+func TestArticlePreviewText_FallsBackToDescription(t *testing.T) {
+	a := db.Article{Description: "fallback"}
+	if got := articlePreviewText(a); got != "fallback" {
+		t.Fatalf("want description, got %q", got)
 	}
 }
 
