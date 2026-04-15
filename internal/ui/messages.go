@@ -67,6 +67,11 @@ type toastExpiredMsg struct {
 	id int
 }
 
+type copiedMsg struct {
+	count  int
+	format string
+}
+
 type errMsg struct {
 	err error
 }

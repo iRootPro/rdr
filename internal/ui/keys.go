@@ -23,9 +23,6 @@ type keyMap struct {
 	Search      key.Binding
 	Help        key.Binding
 
-	FilterAll     key.Binding
-	FilterUnread  key.Binding
-	FilterStarred key.Binding
 	NextUnread    key.Binding
 	Zen           key.Binding
 	Command       key.Binding
@@ -35,6 +32,8 @@ type keyMap struct {
 	LinkPicker    key.Binding
 	ToggleRead    key.Binding
 	MarkAllRead   key.Binding
+	YankURL       key.Binding
+	YankMarkdown  key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -59,9 +58,6 @@ func defaultKeys() keyMap {
 		Search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 
-		FilterAll:     key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "all")),
-		FilterUnread:  key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "unread")),
-		FilterStarred: key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "starred")),
 		NextUnread:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next unread")),
 		Zen:           key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zen")),
 		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "command")),
@@ -71,6 +67,8 @@ func defaultKeys() keyMap {
 		LinkPicker:    key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "links")),
 		ToggleRead:    key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle read")),
 		MarkAllRead:   key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "mark all read")),
+		YankURL:       key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
+		YankMarkdown:  key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", "yank [title](url)")),
 	}
 }
 
@@ -83,7 +81,8 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown},
 		{k.Left, k.Right, k.Tab, k.Enter, k.Back},
 		{k.NextArticle, k.PrevArticle, k.RefreshOne, k.RefreshAll, k.OpenURL, k.FullArticle, k.Star},
-		{k.FilterAll, k.FilterUnread, k.FilterStarred, k.NextUnread, k.Zen},
+		{k.ToggleRead, k.MarkAllRead, k.YankURL, k.YankMarkdown},
+		{k.NextUnread, k.Zen, k.LinkPicker},
 		{k.Search, k.Command, k.Help, k.Settings, k.Quit},
 	}
 }

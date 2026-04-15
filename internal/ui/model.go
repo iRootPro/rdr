@@ -144,6 +144,10 @@ type Model struct {
 	toastID   int
 	syncTotal int
 
+	// Vim-style count prefix. Digits accumulate here until the user
+	// presses a movement key, which consumes it as a repeat count.
+	countPrefix int
+
 	commandInput   textinput.Model
 	commandPrev    focus
 	commandSuggIdx int
@@ -263,6 +267,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == focusLinks {
 			return m.updateLinks(msg)
 		}
+		// Digit prefixes accumulate vim-style counts for the next movement
+		// key. Only consumes bare digits (no modifier). 0 alone is ignored
+		// when the buffer is empty (avoids clobbering future "go to top"
+		// style bindings).
+		if d := digitKey(msg); d >= 0 {
+			if d == 0 && m.countPrefix == 0 {
+				// Bare 0 with no pending count → no-op for now.
+				return m, nil
+			}
+			m.countPrefix = m.countPrefix*10 + d
+			if m.countPrefix > 999 {
+				m.countPrefix = 999
+			}
+			return m, nil
+		}
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
@@ -280,33 +299,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(loadSearchCmd(m.db), textinput.Blink)
 		case key.Matches(msg, m.keys.Zen):
 			m.zenMode = !m.zenMode
-			return m, nil
-		case key.Matches(msg, m.keys.FilterAll):
-			if m.filter != filterAll {
-				m.filter = filterAll
-				m.selArt = 0
-				if len(m.feeds) > 0 {
-					return m, m.loadCurrentCmd()
-				}
-			}
-			return m, nil
-		case key.Matches(msg, m.keys.FilterUnread):
-			if m.filter != filterUnread {
-				m.filter = filterUnread
-				m.selArt = 0
-				if len(m.feeds) > 0 {
-					return m, m.loadCurrentCmd()
-				}
-			}
-			return m, nil
-		case key.Matches(msg, m.keys.FilterStarred):
-			if m.filter != filterStarred {
-				m.filter = filterStarred
-				m.selArt = 0
-				if len(m.feeds) > 0 {
-					return m, m.loadCurrentCmd()
-				}
-			}
 			return m, nil
 		case key.Matches(msg, m.keys.Star):
 			return m.toggleStarOnCurrent()
@@ -367,6 +359,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.toggleReadOnCurrent()
 		case key.Matches(msg, m.keys.MarkAllRead):
 			return m.markAllReadOnCurrentEntry()
+		case key.Matches(msg, m.keys.YankURL):
+			return m.yankCurrent(false)
+		case key.Matches(msg, m.keys.YankMarkdown):
+			return m.yankCurrent(true)
 		case key.Matches(msg, m.keys.NextArticle):
 			if m.focus == focusReader {
 				return m.readerJump(+1)
@@ -588,6 +584,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = ""
 		}
 		return m, nil
+
+	case copiedMsg:
+		m.err = nil
+		return m, m.showToast(fmt.Sprintf("copied %d %s", msg.count, msg.format))
 
 	case articleMarkedMsg:
 		m.err = nil
@@ -846,13 +846,24 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 }
 
 // readerJump advances selArt by dir within the current article list and
-// refreshes reader content without leaving focusReader. No-op if there is
-// no neighbour in the requested direction. Marks the new article read.
+// refreshes reader content without leaving focusReader. Consumes any
+// pending count prefix so `3J` jumps forward by 3.
 func (m Model) readerJump(dir int) (tea.Model, tea.Cmd) {
-	target := m.selArt + dir
+	count := m.consumeCount()
+	step := dir * count
+	target := m.selArt + step
 	if target < 0 || target >= len(m.articles) {
-		m.status = "end of list"
-		return m, nil
+		// Clamp to end of list rather than refusing entirely.
+		if target < 0 {
+			target = 0
+		}
+		if target >= len(m.articles) {
+			target = len(m.articles) - 1
+		}
+		if target == m.selArt {
+			m.status = "end of list"
+			return m, nil
+		}
 	}
 	m.selArt = target
 	a := m.articles[target]
@@ -867,30 +878,49 @@ func (m Model) readerJump(dir int) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) moveDown() (tea.Model, tea.Cmd) {
+	count := m.consumeCount()
 	switch m.focus {
 	case focusFeeds:
-		if m.selEntry < len(m.entries())-1 {
-			m.selEntry++
+		total := len(m.entries())
+		target := m.selEntry + count
+		if target >= total {
+			target = total - 1
+		}
+		if target > m.selEntry {
+			m.selEntry = target
 			return m, m.loadCurrentCmd()
 		}
 	case focusArticles:
-		if m.selArt < len(m.articles)-1 {
-			m.selArt++
+		target := m.selArt + count
+		if target >= len(m.articles) {
+			target = len(m.articles) - 1
+		}
+		if target > m.selArt {
+			m.selArt = target
 		}
 	}
 	return m, nil
 }
 
 func (m Model) moveUp() (tea.Model, tea.Cmd) {
+	count := m.consumeCount()
 	switch m.focus {
 	case focusFeeds:
-		if m.selEntry > 0 {
-			m.selEntry--
+		target := m.selEntry - count
+		if target < 0 {
+			target = 0
+		}
+		if target < m.selEntry {
+			m.selEntry = target
 			return m, m.loadCurrentCmd()
 		}
 	case focusArticles:
-		if m.selArt > 0 {
-			m.selArt--
+		target := m.selArt - count
+		if target < 0 {
+			target = 0
+		}
+		if target < m.selArt {
+			m.selArt = target
 		}
 	}
 	return m, nil
@@ -1085,6 +1115,9 @@ func (m Model) View() string {
 		if m.zenMode {
 			statusText += " " + searchCount.Render("[zen]")
 		}
+		if m.countPrefix > 0 {
+			statusText += " " + searchCount.Render(fmt.Sprintf("[count:%d]", m.countPrefix))
+		}
 	}
 	if m.err != nil {
 		statusText += "  " + errStyle.Render("! "+m.err.Error())
@@ -1092,6 +1125,59 @@ func (m Model) View() string {
 	status := statusBar.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Top, row, status, helpView)
+}
+
+// digitKey returns 0-9 when the keystroke is a bare digit, else -1.
+// Used by count-prefix parsing. Modifier keys disqualify.
+func digitKey(msg tea.KeyMsg) int {
+	if msg.Type != tea.KeyRunes || len(msg.Runes) != 1 {
+		return -1
+	}
+	r := msg.Runes[0]
+	if r < '0' || r > '9' {
+		return -1
+	}
+	return int(r - '0')
+}
+
+// consumeCount returns the pending count prefix (default 1) and clears it.
+func (m *Model) consumeCount() int {
+	c := m.countPrefix
+	m.countPrefix = 0
+	if c < 1 {
+		c = 1
+	}
+	return c
+}
+
+// yankCurrent copies the selected article's URL to the system clipboard
+// via OSC 52. If markdown is true, it copies a `[title](url)` link
+// instead. Works from the articles list or the reader.
+func (m Model) yankCurrent(markdown bool) (tea.Model, tea.Cmd) {
+	var title, url string
+	switch {
+	case m.focus == focusReader && m.readerArt != nil:
+		title = m.readerArt.Title
+		url = m.readerArt.URL
+	case m.focus == focusArticles && len(m.articles) > 0:
+		a := m.articles[m.selArt]
+		title = a.Title
+		url = a.URL
+	default:
+		return m, nil
+	}
+	if url == "" {
+		m.err = fmt.Errorf("no URL to copy")
+		return m, nil
+	}
+	text := url
+	label := "URL copied"
+	if markdown {
+		text = fmt.Sprintf("[%s](%s)", title, url)
+		label = "markdown copied"
+	}
+	osc52Copy(text)
+	return m, m.showToast(label)
 }
 
 // toggleReadOnCurrent flips the read state of the article under the cursor

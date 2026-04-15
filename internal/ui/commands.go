@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,16 @@ import (
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
 )
+
+// osc52Copy writes an OSC 52 escape sequence to stderr so the terminal
+// copies `text` into the system clipboard. Works over SSH and in tmux
+// (when set-clipboard is on). Stderr is used instead of stdout so the
+// write doesn't race bubbletea's altscreen redraws.
+func osc52Copy(text string) {
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+	// Use BEL (\x07) terminator — widest compatibility across terminals.
+	fmt.Fprintf(os.Stderr, "\x1b]52;c;%s\x07", encoded)
+}
 
 const historyFileName = "history"
 const maxHistory = 50
@@ -82,6 +93,8 @@ var commandCompletions = []commandSuggestion{
 	{"read", "Mark matching articles read (:read <query>)"},
 	{"unread", "Mark matching articles unread (:unread <query>)"},
 	{"unstar", "Unstar matching articles (:unstar <query>)"},
+	{"copy url", "Copy matching URLs to clipboard (:copy url <query>)"},
+	{"copy md", "Copy matches as markdown list (:copy md <query>)"},
 	{"import", "Import feeds from OPML file (:import <path>)"},
 	{"export", "Export feeds to OPML file (:export <path>)"},
 	{"images", "Toggle image markdown in reader"},
@@ -309,6 +322,19 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 		}
 		return m, batchApplyCmd(m.db, strings.Join(args, " "), "unstar")
 
+	case "copy":
+		if len(args) < 2 {
+			m.err = fmt.Errorf(":copy needs: url|md <query>")
+			return m, nil
+		}
+		format := args[0]
+		if format != "url" && format != "md" {
+			m.err = fmt.Errorf("unknown copy format %q, expected url|md", format)
+			return m, nil
+		}
+		query := strings.Join(args[1:], " ")
+		return m, batchCopyCmd(m.db, format, query)
+
 	case "import":
 		if len(args) == 0 {
 			m.err = fmt.Errorf(":import needs a path")
@@ -423,6 +449,53 @@ func batchApplyCmd(d *db.DB, queryStr, action string) tea.Cmd {
 			return errMsg{err}
 		}
 		return batchAppliedMsg{action: action, count: len(ids)}
+	}
+}
+
+// batchCopyCmd evaluates a query, collects matching articles, formats
+// them, and writes to the system clipboard via OSC 52.
+func batchCopyCmd(d *db.DB, format, query string) tea.Cmd {
+	return func() tea.Msg {
+		atoms, err := ParseQuery(query)
+		if err != nil {
+			return errMsg{fmt.Errorf("copy query: %w", err)}
+		}
+		all, err := d.ListAllArticles(5000)
+		if err != nil {
+			return errMsg{err}
+		}
+		var lines []string
+		for _, a := range all {
+			it := db.SearchItem{
+				Title:       a.Title,
+				FeedName:    a.FeedName,
+				Description: a.Description,
+				PublishedAt: a.PublishedAt,
+				ReadAt:      a.ReadAt,
+				StarredAt:   a.StarredAt,
+			}
+			if !EvalQuery(atoms, it) {
+				continue
+			}
+			if a.URL == "" {
+				continue
+			}
+			switch format {
+			case "url":
+				lines = append(lines, a.URL)
+			case "md":
+				title := a.Title
+				if title == "" {
+					title = a.URL
+				}
+				lines = append(lines, fmt.Sprintf("- [%s](%s)", title, a.URL))
+			}
+		}
+		if len(lines) == 0 {
+			return errMsg{fmt.Errorf("no matches")}
+		}
+		osc52Copy(strings.Join(lines, "\n"))
+		return copiedMsg{count: len(lines), format: format}
 	}
 }
 
