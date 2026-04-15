@@ -449,8 +449,8 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "help":
-		m.showHelp = !m.showHelp
-		m.help.ShowAll = m.showHelp
+		m.helpPrev = m.focus
+		m.focus = focusHelp
 		return m, nil
 
 	case "settings":

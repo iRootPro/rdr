@@ -60,6 +60,7 @@ const (
 	focusSearch
 	focusCommand
 	focusLinks
+	focusHelp
 )
 
 type settingsMode int
@@ -117,7 +118,7 @@ type Model struct {
 	readerArt *db.Article
 
 	help     help.Model
-	showHelp bool
+	helpPrev focus
 
 	feedErrors map[int64]error
 
@@ -277,6 +278,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == focusLinks {
 			return m.updateLinks(msg)
 		}
+		if m.focus == focusHelp {
+			return m.updateHelp(msg)
+		}
 		// Digit prefixes accumulate vim-style counts for the next movement
 		// key. Only consumes bare digits (no modifier). 0 alone is ignored
 		// when the buffer is empty (avoids clobbering future "go to top"
@@ -322,8 +326,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commandSuggIdx = 0
 			return m, textinput.Blink
 		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			m.help.ShowAll = m.showHelp
+			m.helpPrev = m.focus
+			m.focus = focusHelp
 			return m, nil
 		case key.Matches(msg, m.keys.FullArticle):
 			if m.focus == focusReader && m.readerArt != nil && m.readerArt.URL != "" && !m.fetching {
@@ -785,8 +789,8 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Help):
-		m.showHelp = !m.showHelp
-		m.help.ShowAll = m.showHelp
+		m.helpPrev = m.focus
+		m.focus = focusHelp
 		return m, nil
 	case msg.String() == "a":
 		m.settingsMode = smAddName
@@ -1048,6 +1052,13 @@ func (m Model) View() string {
 		if m.err != nil {
 			statusText += "  " + errStyle.Render("! "+m.err.Error())
 		}
+		status := statusBar.Width(m.width).Render(statusText)
+		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+	}
+
+	if m.focus == focusHelp {
+		body := renderHelpScreen(m, m.width, m.height-1-helpH)
+		statusText := "rdr · help · " + focusLabel(m.helpPrev)
 		status := statusBar.Width(m.width).Render(statusText)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
@@ -1563,10 +1574,9 @@ func (m Model) loadCurrentCmd() tea.Cmd {
 }
 
 func (m Model) helpView() string {
-	if m.showHelp {
-		return m.help.View(m.keys)
-	}
-	return m.help.ShortHelpView(m.keys.ShortHelp())
+	// Context-aware single-row short help. The full-screen help is a
+	// separate focus state (focusHelp) and does not replace this.
+	return m.help.ShortHelpView(shortHelpFor(m.focus, m.keys))
 }
 
 func loadFeedsCmd(d *db.DB) tea.Cmd {
