@@ -28,7 +28,49 @@ func osc52Copy(text string) {
 }
 
 const historyFileName = "history"
+const collapsedCatsFileName = "collapsed_categories"
 const maxHistory = 50
+
+// readCollapsedCats loads the persisted set of collapsed category names.
+// Missing file → empty map. Empty string is allowed as a valid key for
+// the "Other" bucket.
+func readCollapsedCats(home string) map[string]bool {
+	out := make(map[string]bool)
+	if home == "" {
+		return out
+	}
+	f, err := os.Open(filepath.Join(home, collapsedCatsFileName))
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		name := strings.TrimRight(scanner.Text(), "\r\n")
+		out[name] = true
+	}
+	return out
+}
+
+// writeCollapsedCats serialises the set, one category per line. Called
+// after every toggle. Errors are swallowed (QoL feature).
+func writeCollapsedCats(home string, cats map[string]bool) {
+	if home == "" {
+		return
+	}
+	var names []string
+	for k, v := range cats {
+		if v {
+			names = append(names, k)
+		}
+	}
+	sort.Strings(names)
+	data := strings.Join(names, "\n")
+	if data != "" {
+		data += "\n"
+	}
+	_ = os.WriteFile(filepath.Join(home, collapsedCatsFileName), []byte(data), 0o644)
+}
 
 // readHistoryFile loads a previously saved command history. The file format
 // is one command per line, oldest first (append-only feel like ~/.bash_history).
@@ -98,6 +140,8 @@ var commandCompletions = []commandSuggestion{
 	{"import", "Import feeds from OPML file (:import <path>)"},
 	{"export", "Export feeds to OPML file (:export <path>)"},
 	{"images", "Toggle image markdown in reader"},
+	{"collapseall", "Collapse all feed categories"},
+	{"expandall", "Expand all feed categories"},
 	{"zen", "Toggle zen mode"},
 	{"help", "Toggle help overlay"},
 	{"settings", "Open feed settings"},
@@ -367,6 +411,24 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 		m.zenMode = !m.zenMode
 		return m, nil
 
+	case "collapseall":
+		if m.collapsedCats == nil {
+			m.collapsedCats = map[string]bool{}
+		}
+		// Collect category keys from current feeds and mark them all.
+		for _, f := range m.feeds {
+			m.collapsedCats[f.Category] = true
+		}
+		writeCollapsedCats(m.home, m.collapsedCats)
+		m.status = "categories collapsed"
+		return m, nil
+
+	case "expandall":
+		m.collapsedCats = map[string]bool{}
+		writeCollapsedCats(m.home, m.collapsedCats)
+		m.status = "categories expanded"
+		return m, nil
+
 	case "images":
 		m.showImages = !m.showImages
 		if m.showImages {
@@ -572,7 +634,7 @@ func importOPMLFile(d *db.DB, path string) (int, error) {
 	}
 	var added int
 	for _, e := range entries {
-		if _, err := d.UpsertFeed(e.Name, e.URL); err != nil {
+		if _, err := d.UpsertFeed(e.Name, e.URL, ""); err != nil {
 			return added, fmt.Errorf("upsert %q: %w", e.Name, err)
 		}
 		added++

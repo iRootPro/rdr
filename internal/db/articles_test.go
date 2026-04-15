@@ -18,7 +18,7 @@ func newArticle(feedID int64, url, title string, published time.Time) Article {
 
 func TestUpsertArticle_InsertThenUpdatePreservesReadAt(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	now := time.Now().UTC().Truncate(time.Second)
 
 	a := newArticle(f.ID, "https://a.example/1", "v1", now)
@@ -57,7 +57,7 @@ func TestUpsertArticle_InsertThenUpdatePreservesReadAt(t *testing.T) {
 
 func TestListArticles_OrdersByPublishedDesc(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
 
 	_, _ = d.UpsertArticle(newArticle(f.ID, "https://a.example/1", "older", base))
@@ -79,7 +79,7 @@ func TestListArticles_OrdersByPublishedDesc(t *testing.T) {
 
 func TestTrimArticles_RemovesOldestReadBeyondLimit(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
 
 	for i := 0; i < 3; i++ {
@@ -122,7 +122,7 @@ func urlN(i int) string {
 
 func TestUpsertArticle_ReturnsInsertedFlag(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	a := newArticle(f.ID, "https://a.example/1", "v1", time.Now().UTC())
 
 	inserted, err := d.UpsertArticle(a)
@@ -144,7 +144,7 @@ func TestUpsertArticle_ReturnsInsertedFlag(t *testing.T) {
 
 func TestListArticlesFiltered_UnreadOnly(t *testing.T) {
 	d := openTestDB(t)
-	f, err := d.UpsertFeed("A", "https://a.example/rss")
+	f, err := d.UpsertFeed("A", "https://a.example/rss", "")
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestListArticlesFiltered_UnreadOnly(t *testing.T) {
 
 func TestToggleStar_TogglesAndPersistsTimestamp(t *testing.T) {
 	d := openTestDB(t)
-	f, err := d.UpsertFeed("A", "https://a.example/rss")
+	f, err := d.UpsertFeed("A", "https://a.example/rss", "")
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestToggleStar_TogglesAndPersistsTimestamp(t *testing.T) {
 
 func TestListArticlesFiltered_StarredOnly(t *testing.T) {
 	d := openTestDB(t)
-	f, err := d.UpsertFeed("A", "https://a.example/rss")
+	f, err := d.UpsertFeed("A", "https://a.example/rss", "")
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}
@@ -271,8 +271,8 @@ func TestListArticlesFiltered_StarredOnly(t *testing.T) {
 
 func TestMarkFeedRead_MarksOnlyThatFeedsUnread(t *testing.T) {
 	d := openTestDB(t)
-	fa, _ := d.UpsertFeed("A", "https://a.example/rss")
-	fb, _ := d.UpsertFeed("B", "https://b.example/rss")
+	fa, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	fb, _ := d.UpsertFeed("B", "https://b.example/rss", "")
 	base := time.Now().UTC()
 
 	for i := 0; i < 3; i++ {
@@ -310,7 +310,7 @@ func TestMarkFeedRead_MarksOnlyThatFeedsUnread(t *testing.T) {
 
 func TestMarkFeedRead_IdempotentOnAlreadyRead(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	if _, err := d.UpsertArticle(newArticle(f.ID, "https://a.example/1", "v", time.Now().UTC())); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestMarkFeedRead_IdempotentOnAlreadyRead(t *testing.T) {
 
 func TestMarkUnread_ClearsReadAt(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	if _, err := d.UpsertArticle(newArticle(f.ID, "https://a.example/1", "v", time.Now().UTC())); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestMarkUnread_ClearsReadAt(t *testing.T) {
 
 func TestBulkMarkRead_MarksOnlyUnread(t *testing.T) {
 	d := openTestDB(t)
-	f, err := d.UpsertFeed("A", "https://a.example/rss")
+	f, err := d.UpsertFeed("A", "https://a.example/rss", "")
 	if err != nil {
 		t.Fatalf("feed: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestBulkMarkRead_MarksOnlyUnread(t *testing.T) {
 
 func TestBulkMarkUnread_ClearsReadAt(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	a := newArticle(f.ID, "https://a.example/1", "v", time.Now().UTC())
 	if _, err := d.UpsertArticle(a); err != nil {
 		t.Fatalf("upsert: %v", err)
@@ -396,7 +396,7 @@ func TestBulkMarkUnread_ClearsReadAt(t *testing.T) {
 
 func TestBulkSetStarred_BothDirections(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	for i := 0; i < 2; i++ {
 		a := newArticle(f.ID, urlN(i), "t", time.Now().UTC())
 		if _, err := d.UpsertArticle(a); err != nil {
@@ -439,11 +439,11 @@ func TestBulkMarkRead_EmptyIsNoop(t *testing.T) {
 
 func TestSearchArticles_ReturnsCrossfeedOrdered(t *testing.T) {
 	d := openTestDB(t)
-	fa, err := d.UpsertFeed("Habr", "https://habr.example/rss")
+	fa, err := d.UpsertFeed("Habr", "https://habr.example/rss", "")
 	if err != nil {
 		t.Fatalf("feed A: %v", err)
 	}
-	fb, err := d.UpsertFeed("Hacker News", "https://news.example/rss")
+	fb, err := d.UpsertFeed("Hacker News", "https://news.example/rss", "")
 	if err != nil {
 		t.Fatalf("feed B: %v", err)
 	}
@@ -500,7 +500,7 @@ func titlesOf(items []SearchItem) []string {
 
 func TestCacheArticle_SetsCachedBodyAndCachedAt(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
 	a := newArticle(f.ID, "https://a.example/1", "v1", time.Now().UTC())
 	if _, err := d.UpsertArticle(a); err != nil {
 		t.Fatalf("upsert: %v", err)

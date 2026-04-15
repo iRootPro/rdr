@@ -46,4 +46,9 @@ var migrations = []string{
 	ALTER TABLE articles ADD COLUMN starred_at DATETIME;
 	CREATE INDEX idx_articles_starred_at ON articles(starred_at) WHERE starred_at IS NOT NULL;
 	`,
+	// 003: feed categories
+	`
+	ALTER TABLE feeds ADD COLUMN category TEXT NOT NULL DEFAULT '';
+	CREATE INDEX idx_feeds_category ON feeds(category);
+	`,
 }

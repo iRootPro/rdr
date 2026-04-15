@@ -34,6 +34,7 @@ type keyMap struct {
 	MarkAllRead   key.Binding
 	YankURL       key.Binding
 	YankMarkdown  key.Binding
+	ToggleFold    key.Binding
 }
 
 func defaultKeys() keyMap {
@@ -69,6 +70,7 @@ func defaultKeys() keyMap {
 		MarkAllRead:   key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "mark all read")),
 		YankURL:       key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
 		YankMarkdown:  key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", "yank [title](url)")),
+		ToggleFold:    key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "collapse category")),
 	}
 }
 

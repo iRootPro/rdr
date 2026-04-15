@@ -47,6 +47,11 @@ type folderArticlesLoadedMsg struct {
 	articles  []db.Article
 }
 
+type categoryArticlesLoadedMsg struct {
+	name     string
+	articles []db.Article
+}
+
 type allArticlesLoadedMsg struct {
 	articles []db.Article
 }
