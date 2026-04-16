@@ -15,6 +15,7 @@ import (
 
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
+	"github.com/iRootPro/rdr/internal/i18n"
 )
 
 // osc52Copy writes an OSC 52 escape sequence to stderr so the terminal
@@ -122,43 +123,45 @@ type commandSuggestion struct {
 	Help     string
 }
 
-var commandCompletions = []commandSuggestion{
-	{"sync", "Fetch all feeds"},
-	{"refresh", "Fetch all feeds (alias for sync)"},
-	{"sort date", "Sort articles by publish date"},
-	{"sort title", "Sort articles alphabetically"},
-	{"sortreverse", "Toggle sort direction"},
-	{"filter all", "Show all articles"},
-	{"filter unread", "Show only unread articles"},
-	{"filter starred", "Show only starred articles"},
-	{"star", "Toggle star on current article"},
-	{"read", "Mark matching articles read (:read <query>)"},
-	{"unread", "Mark matching articles unread (:unread <query>)"},
-	{"unstar", "Unstar matching articles (:unstar <query>)"},
-	{"copy url", "Copy matching URLs to clipboard (:copy url <query>)"},
-	{"copy md", "Copy matches as markdown list (:copy md <query>)"},
-	{"import", "Import feeds from OPML file (:import <path>)"},
-	{"export", "Export feeds to OPML file (:export <path>)"},
-	{"images", "Toggle image markdown in reader"},
-	{"collapseall", "Collapse all feed categories"},
-	{"expandall", "Expand all feed categories"},
-	{"zen", "Toggle zen mode"},
-	{"help", "Toggle help overlay"},
-	{"settings", "Open feed settings"},
-	{"search", "Open search picker"},
-	{"quit", "Exit rdr"},
-	{"q", "Exit rdr (alias for quit)"},
+func buildCommandCompletions(tr *i18n.Strings) []commandSuggestion {
+	c := tr.Command
+	return []commandSuggestion{
+		{"sync", c.HelpSync},
+		{"refresh", c.HelpRefresh},
+		{"sort date", c.HelpSortDate},
+		{"sort title", c.HelpSortTitle},
+		{"sortreverse", c.HelpSortReverse},
+		{"filter all", c.HelpFilterAll},
+		{"filter unread", c.HelpFilterUnread},
+		{"filter starred", c.HelpFilterStarred},
+		{"star", c.HelpStar},
+		{"read", c.HelpRead},
+		{"unread", c.HelpUnread},
+		{"unstar", c.HelpUnstar},
+		{"copy url", c.HelpCopyURL},
+		{"copy md", c.HelpCopyMD},
+		{"import", c.HelpImport},
+		{"export", c.HelpExport},
+		{"images", c.HelpImages},
+		{"collapseall", c.HelpCollapseAll},
+		{"expandall", c.HelpExpandAll},
+		{"zen", c.HelpZen},
+		{"help", c.HelpHelp},
+		{"settings", c.HelpSettings},
+		{"search", c.HelpSearch},
+		{"quit", c.HelpQuit},
+		{"q", c.HelpQuitAlias},
+	}
 }
 
-func commandSuggestionsFor(input string) []commandSuggestion {
+func commandSuggestionsFor(input string, tr *i18n.Strings) []commandSuggestion {
+	all := buildCommandCompletions(tr)
 	input = strings.TrimLeft(input, " ")
 	if input == "" {
-		out := make([]commandSuggestion, len(commandCompletions))
-		copy(out, commandCompletions)
-		return out
+		return all
 	}
 	var out []commandSuggestion
-	for _, c := range commandCompletions {
+	for _, c := range all {
 		if strings.HasPrefix(c.Complete, input) {
 			out = append(out, c)
 		}
@@ -169,13 +172,13 @@ func commandSuggestionsFor(input string) []commandSuggestion {
 const maxCommandPopupRows = 8
 
 func renderCommandPopup(m Model, width int) string {
-	sugg := commandSuggestionsFor(m.commandInput.Value())
+	sugg := commandSuggestionsFor(m.commandInput.Value(), m.tr)
 	innerW := width - 4
 	if innerW < 10 {
 		innerW = 10
 	}
 	if len(sugg) == 0 {
-		return paneInactive.Width(innerW).Render(searchHint.Render("(no matching commands)"))
+		return paneInactive.Width(innerW).Render(searchHint.Render(m.tr.Command.NoMatching))
 	}
 
 	truncated := sugg
@@ -186,8 +189,8 @@ func renderCommandPopup(m Model, width int) string {
 	}
 
 	var b strings.Builder
-	textStyle := lipgloss.NewStyle().Foreground(colorText)
-	helpStyle := lipgloss.NewStyle().Foreground(colorMuted)
+	textStyle := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
+	helpStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
 	for i, s := range truncated {
 		prefix := "  "
 		style := textStyle
@@ -202,9 +205,10 @@ func renderCommandPopup(m Model, width int) string {
 		}
 	}
 	if overflow > 0 {
-		b.WriteString(searchHint.Render(fmt.Sprintf("  … +%d more", overflow)))
+		b.WriteString(searchHint.Render(fmt.Sprintf(m.tr.Command.MoreFmt, overflow)))
 	}
-	return paneInactive.Width(innerW).Render(b.String())
+	c := fillBackground(b.String(), innerW-2)
+	return paneInactive.Width(innerW).Render(c)
 }
 
 // updateCommand handles keystrokes while the user is typing in the ':' prompt.
@@ -249,7 +253,7 @@ func (m Model) updateCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Down):
-		sugg := commandSuggestionsFor(m.commandInput.Value())
+		sugg := commandSuggestionsFor(m.commandInput.Value(), m.tr)
 		limit := len(sugg)
 		if limit > maxCommandPopupRows {
 			limit = maxCommandPopupRows
@@ -259,7 +263,7 @@ func (m Model) updateCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.String() == "tab":
-		sugg := commandSuggestionsFor(m.commandInput.Value())
+		sugg := commandSuggestionsFor(m.commandInput.Value(), m.tr)
 		if len(sugg) > 0 && m.commandSuggIdx >= 0 && m.commandSuggIdx < len(sugg) {
 			m.commandInput.SetValue(sugg[m.commandSuggIdx].Complete)
 			m.commandInput.CursorEnd()
@@ -283,6 +287,11 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 	cmd := parts[0]
 	args := parts[1:]
 
+	tr := m.tr
+	if tr == nil {
+		tr = i18n.For(i18n.EN)
+	}
+
 	switch cmd {
 	case "q", "quit":
 		return m, tea.Quit
@@ -292,34 +301,40 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.fetching = true
-		m.status = "fetching…"
+		m.status = tr.Status.Fetching
 		return m, tea.Batch(fetchAllCmd(m.fetcher), m.spin.Tick)
 
 	case "sort":
 		if len(args) == 0 {
-			m.err = fmt.Errorf(":sort needs date|title")
+			m.err = fmt.Errorf("%s", tr.Errors.SortNeedsArg)
 			return m, nil
 		}
 		switch args[0] {
 		case "date", "title":
 			m.sortField = args[0]
 			applySort(m.articles, m.sortField, m.sortReverse)
-			m.status = "sort: " + m.sortField
+			if m.db != nil {
+				_ = m.db.SetSortField(m.sortField)
+			}
+			m.status = fmt.Sprintf(tr.Status.SortFmt, m.sortField)
 			return m, nil
 		default:
-			m.err = fmt.Errorf("unknown sort field %q", args[0])
+			m.err = fmt.Errorf(tr.Errors.UnknownSortFmt, args[0])
 			return m, nil
 		}
 
 	case "sortreverse":
 		m.sortReverse = !m.sortReverse
 		applySort(m.articles, m.sortField, m.sortReverse)
-		m.status = "sort reversed"
+		if m.db != nil {
+			_ = m.db.SetSortReverse(m.sortReverse)
+		}
+		m.status = tr.Status.SortReversed
 		return m, nil
 
 	case "filter":
 		if len(args) == 0 {
-			m.err = fmt.Errorf(":filter needs all|unread|starred")
+			m.err = fmt.Errorf("%s", tr.Errors.FilterNeedsArg)
 			return m, nil
 		}
 		switch args[0] {
@@ -330,7 +345,7 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 		case "starred":
 			m.filter = filterStarred
 		default:
-			m.err = fmt.Errorf("unknown filter %q", args[0])
+			m.err = fmt.Errorf(tr.Errors.UnknownFilterFmt, args[0])
 			return m, nil
 		}
 		m.selArt = 0
@@ -341,52 +356,52 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 
 	case "read":
 		if len(args) == 0 {
-			m.err = fmt.Errorf(":read needs a query")
+			m.err = fmt.Errorf("%s", tr.Errors.ReadNeedsQuery)
 			return m, nil
 		}
-		tick := m.startBusy("marking read…")
+		tick := m.startBusy(tr.Status.MarkingRead)
 		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "read"), tick)
 
 	case "unread":
 		if len(args) == 0 {
-			m.err = fmt.Errorf(":unread needs a query")
+			m.err = fmt.Errorf("%s", tr.Errors.UnreadNeedsQuery)
 			return m, nil
 		}
-		tick := m.startBusy("marking unread…")
+		tick := m.startBusy(tr.Status.MarkingUnread)
 		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "unread"), tick)
 
 	case "star":
 		if len(args) == 0 {
 			return m.toggleStarOnCurrent()
 		}
-		tick := m.startBusy("starring…")
+		tick := m.startBusy(tr.Status.Starring)
 		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "star"), tick)
 
 	case "unstar":
 		if len(args) == 0 {
-			m.err = fmt.Errorf(":unstar needs a query")
+			m.err = fmt.Errorf("%s", tr.Errors.UnstarNeedsQuery)
 			return m, nil
 		}
-		tick := m.startBusy("unstarring…")
+		tick := m.startBusy(tr.Status.Unstarring)
 		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "unstar"), tick)
 
 	case "copy":
 		if len(args) < 2 {
-			m.err = fmt.Errorf(":copy needs: url|md <query>")
+			m.err = fmt.Errorf("%s", tr.Errors.CopyNeedsArg)
 			return m, nil
 		}
 		format := args[0]
 		if format != "url" && format != "md" {
-			m.err = fmt.Errorf("unknown copy format %q, expected url|md", format)
+			m.err = fmt.Errorf(tr.Errors.UnknownCopyFmt, format)
 			return m, nil
 		}
 		query := strings.Join(args[1:], " ")
-		tick := m.startBusy("copying…")
-		return m, tea.Batch(batchCopyCmd(m.db, format, query), tick)
+		tick := m.startBusy(tr.Status.Copying)
+		return m, tea.Batch(batchCopyCmd(m.db, format, query, tr), tick)
 
 	case "import":
 		if len(args) == 0 {
-			m.err = fmt.Errorf(":import needs a path")
+			m.err = fmt.Errorf("%s", tr.Errors.ImportNeedsPath)
 			return m, nil
 		}
 		path := expandPath(strings.Join(args, " "))
@@ -395,12 +410,12 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 			m.err = err
 			return m, nil
 		}
-		m.status = fmt.Sprintf("imported %d feeds", n)
+		m.status = fmt.Sprintf(tr.Status.ImportedFmt, n)
 		return m, tea.Batch(loadFeedsCmd(m.db), fetchAllCmd(m.fetcher), m.spin.Tick)
 
 	case "export":
 		if len(args) == 0 {
-			m.err = fmt.Errorf(":export needs a path")
+			m.err = fmt.Errorf("%s", tr.Errors.ExportNeedsPath)
 			return m, nil
 		}
 		path := expandPath(strings.Join(args, " "))
@@ -409,7 +424,7 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 			m.err = err
 			return m, nil
 		}
-		m.status = fmt.Sprintf("exported %d feeds to %s", n, path)
+		m.status = fmt.Sprintf(tr.Status.ExportedFmt, n, path)
 		return m, nil
 
 	case "zen":
@@ -425,26 +440,30 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 			m.collapsedCats[f.Category] = true
 		}
 		writeCollapsedCats(m.home, m.collapsedCats)
-		m.status = "categories collapsed"
+		m.status = tr.Status.CategoriesClosed
 		return m, nil
 
 	case "expandall":
 		m.collapsedCats = map[string]bool{}
 		writeCollapsedCats(m.home, m.collapsedCats)
-		m.status = "categories expanded"
+		m.status = tr.Status.CategoriesOpened
 		return m, nil
 
 	case "images":
 		m.showImages = !m.showImages
+		if m.db != nil {
+			_ = m.db.SetShowImages(m.showImages)
+		}
 		if m.showImages {
-			m.status = "images on"
+			m.status = tr.Status.ImagesOn
 		} else {
-			m.status = "images off"
+			m.status = tr.Status.ImagesOff
 		}
 		// If reading an article right now, re-render in place.
 		if m.focus == focusReader && m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.showImages))
+			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width-4, m.showImages, m.tr))
 		}
 		return m, nil
 
@@ -468,7 +487,7 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 		return m, loadSearchCmd(m.db)
 	}
 
-	m.err = fmt.Errorf("unknown command %q", cmd)
+	m.err = fmt.Errorf(tr.Errors.UnknownCommandFmt, cmd)
 	return m, nil
 }
 
@@ -521,7 +540,7 @@ func batchApplyCmd(d *db.DB, queryStr, action string) tea.Cmd {
 
 // batchCopyCmd evaluates a query, collects matching articles, formats
 // them, and writes to the system clipboard via OSC 52.
-func batchCopyCmd(d *db.DB, format, query string) tea.Cmd {
+func batchCopyCmd(d *db.DB, format, query string, tr *i18n.Strings) tea.Cmd {
 	return func() tea.Msg {
 		atoms, err := ParseQuery(query)
 		if err != nil {
@@ -559,7 +578,7 @@ func batchCopyCmd(d *db.DB, format, query string) tea.Cmd {
 			}
 		}
 		if len(lines) == 0 {
-			return errMsg{fmt.Errorf("no matches")}
+			return errMsg{fmt.Errorf("%s", tr.Errors.NoMatches)}
 		}
 		osc52Copy(strings.Join(lines, "\n"))
 		return copiedMsg{count: len(lines), format: format}

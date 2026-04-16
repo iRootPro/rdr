@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -97,7 +98,11 @@ func TestTrimArticles_RemovesOldestReadBeyondLimit(t *testing.T) {
 		}
 	}
 
-	if err := d.TrimArticles(f.ID, 3); err != nil {
+	// cutoff in the future so ALL rows look "stale" to trim — this
+	// simulates the case where the articles are no longer in the
+	// current RSS response.
+	cutoff := time.Now().UTC().Add(time.Hour)
+	if err := d.TrimArticles(f.ID, 3, cutoff); err != nil {
 		t.Fatalf("TrimArticles: %v", err)
 	}
 
@@ -113,6 +118,97 @@ func TestTrimArticles_RemovesOldestReadBeyondLimit(t *testing.T) {
 	}
 	if unread != 2 {
 		t.Fatalf("want 2 unread remaining, got %d", unread)
+	}
+}
+
+// TestTrimArticles_SkipsFreshlyFetched guards the regression where trim
+// would delete read articles that the RSS feed still lists, causing
+// them to re-appear as unread on the next fetch.
+func TestTrimArticles_SkipsFreshlyFetched(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+
+	// Upsert 5 articles, all "freshly fetched".
+	for i := 0; i < 5; i++ {
+		a := newArticle(f.ID, urlN(i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		_, _ = d.UpsertArticle(a)
+	}
+	// Mark everything read.
+	list, _ := d.ListArticles(f.ID, 10)
+	for _, a := range list {
+		_ = d.MarkRead(a.ID)
+	}
+
+	// cutoff BEFORE the fetch start — every article is "fresh" (its
+	// last_fetched_at >= cutoff), so trim must not touch them even
+	// when the limit is 0 (would otherwise delete all of them).
+	cutoff := base.Add(-time.Hour)
+	if err := d.TrimArticles(f.ID, 1, cutoff); err != nil {
+		t.Fatalf("TrimArticles: %v", err)
+	}
+
+	list, _ = d.ListArticles(f.ID, 10)
+	if len(list) != 5 {
+		t.Fatalf("freshly fetched rows must survive trim, got %d remaining", len(list))
+	}
+}
+
+// TestTrimArticles_UserFlowSurvivesRefresh reproduces the exact user
+// report: mark read in Inbox → exit/return → refresh (R) → marked
+// article must NOT come back as unread. Simulates two fetch cycles
+// around a MarkRead in between.
+func TestTrimArticles_UserFlowSurvivesRefresh(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+
+	// Fetch #1: insert 5 articles that simulate the RSS response.
+	for i := 0; i < 5; i++ {
+		a := newArticle(f.ID, urlN(i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		_, _ = d.UpsertArticle(a)
+	}
+	// User marks one article read.
+	list, _ := d.ListArticles(f.ID, 10)
+	var markedID int64
+	for _, a := range list {
+		if a.Title == "art2" {
+			_ = d.MarkRead(a.ID)
+			markedID = a.ID
+			break
+		}
+	}
+	if markedID == 0 {
+		t.Fatal("could not find art2 to mark read")
+	}
+
+	// Fetch #2: same RSS response. fetchStart is captured before the
+	// upsert loop, matching how fetcher.FetchOne does it.
+	fetchStart := time.Now().UTC()
+	for i := 0; i < 5; i++ {
+		a := newArticle(f.ID, urlN(i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		_, _ = d.UpsertArticle(a)
+	}
+	// Trim with a very aggressive limit (would normally delete read
+	// articles): the protection must keep the just-upserted rows.
+	if err := d.TrimArticles(f.ID, 1, fetchStart); err != nil {
+		t.Fatalf("TrimArticles: %v", err)
+	}
+
+	// Marked article must still exist and still be read.
+	list, _ = d.ListArticles(f.ID, 10)
+	found := false
+	for _, a := range list {
+		if a.ID == markedID {
+			found = true
+			if a.ReadAt == nil {
+				t.Fatal("marked article lost its read state after refresh")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatal("marked article disappeared after refresh — this is the bug")
 	}
 }
 

@@ -10,23 +10,39 @@ import (
 )
 
 var (
+	helpSectionTitle lipgloss.Style
+	helpKey          lipgloss.Style
+	helpDesc         lipgloss.Style
+	helpScreenTitle  lipgloss.Style
+)
+
+func init() {
+	rebuildHelpStyles()
+	registerStyleRebuild(rebuildHelpStyles)
+}
+
+func rebuildHelpStyles() {
 	helpSectionTitle = lipgloss.NewStyle().
-				Foreground(colorAccent).
-				Bold(true).
-				Padding(0, 0, 0, 0)
+		Foreground(colorAccent).
+		Background(colorBG).
+		Bold(true).
+		Padding(0, 0, 0, 0)
 
 	helpKey = lipgloss.NewStyle().
 		Foreground(colorTeal).
+		Background(colorBG).
 		Bold(true)
 
 	helpDesc = lipgloss.NewStyle().
-			Foreground(colorMuted)
+		Foreground(colorMuted).
+		Background(colorBG)
 
 	helpScreenTitle = lipgloss.NewStyle().
-			Foreground(colorAccent).
-			Bold(true).
-			Padding(0, 0, 1, 0)
-)
+		Foreground(colorAccent).
+		Background(colorBG).
+		Bold(true).
+		Padding(0, 0, 1, 0)
+}
 
 // updateHelp handles keystrokes while the full-screen help overlay is
 // open. Anything except Back / Help is swallowed so stray keys don't
@@ -55,10 +71,10 @@ func renderHelpScreen(m Model, width, height int) string {
 		innerW = 30
 	}
 
-	sections := fullHelpFor(m.helpPrev)
+	sections := fullHelpFor(m.helpPrev, m.tr)
 
 	var b strings.Builder
-	b.WriteString(helpScreenTitle.Render(fmt.Sprintf("rdr · help · %s", focusLabel(m.helpPrev))))
+	b.WriteString(helpScreenTitle.Render(fmt.Sprintf(m.tr.Help.TitleFmt, focusLabel(m.helpPrev, m.tr))))
 	b.WriteString("\n")
 
 	// Fixed key column width so descriptions line up across sections.
@@ -79,9 +95,10 @@ func renderHelpScreen(m Model, width, height int) string {
 
 	// Footer hint — fall-through to bottom of the pane.
 	b.WriteString("\n")
-	b.WriteString(searchHint.Render("esc close · ? toggle"))
+	b.WriteString(searchHint.Render(m.tr.Help.Footer))
 
-	return paneActive.Width(width - 2).Height(innerH).Render(b.String())
+	content := fillBackground(b.String(), width-4)
+	return paneActive.Width(width - 2).Height(innerH).Render(content)
 }
 
 // padRight right-pads s with spaces so its visible width is n. Used for

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/iRootPro/rdr/internal/config"
 	"github.com/iRootPro/rdr/internal/db"
 )
 
@@ -205,7 +204,7 @@ func TestRefreshFolderCounts_MatchesQuery(t *testing.T) {
 	now := time.Now().UTC()
 	readT := now.Add(-time.Hour)
 	m := Model{
-		smartFolders: []config.SmartFolder{
+		smartFolders: []db.SmartFolder{
 			{Name: "Inbox", Query: "unread"},
 			{Name: "Habr", Query: "feed:habr"},
 		},
@@ -227,14 +226,15 @@ func TestRefreshFolderCounts_MatchesQuery(t *testing.T) {
 }
 
 func TestCommandSuggestions_EmptyReturnsAll(t *testing.T) {
-	got := commandSuggestionsFor("")
-	if len(got) != len(commandCompletions) {
-		t.Fatalf("empty input: want %d, got %d", len(commandCompletions), len(got))
+	got := commandSuggestionsFor("", testTR)
+	all := buildCommandCompletions(testTR)
+	if len(got) != len(all) {
+		t.Fatalf("empty input: want %d, got %d", len(all), len(got))
 	}
 }
 
 func TestCommandSuggestions_PrefixFilters(t *testing.T) {
-	got := commandSuggestionsFor("so")
+	got := commandSuggestionsFor("so", testTR)
 	// Expected: sort date, sort title, sortreverse
 	if len(got) != 3 {
 		t.Fatalf("prefix 'so': want 3, got %d: %+v", len(got), got)
@@ -247,28 +247,28 @@ func TestCommandSuggestions_PrefixFilters(t *testing.T) {
 }
 
 func TestCommandSuggestions_PrefixWithSpace(t *testing.T) {
-	got := commandSuggestionsFor("sort ")
+	got := commandSuggestionsFor("sort ", testTR)
 	if len(got) != 2 {
 		t.Fatalf("prefix 'sort ': want 2 (date, title), got %d: %+v", len(got), got)
 	}
 }
 
 func TestCommandSuggestions_NoMatch(t *testing.T) {
-	got := commandSuggestionsFor("zzz")
+	got := commandSuggestionsFor("zzz", testTR)
 	if len(got) != 0 {
 		t.Fatalf("want 0, got %d", len(got))
 	}
 }
 
 func TestCommandSuggestions_FullMatchReturnsSelf(t *testing.T) {
-	got := commandSuggestionsFor("quit")
+	got := commandSuggestionsFor("quit", testTR)
 	if len(got) != 1 || got[0].Complete != "quit" {
 		t.Fatalf("want exact 'quit', got %+v", got)
 	}
 }
 
 func TestCommandSuggestions_LeadingSpaceIgnored(t *testing.T) {
-	got := commandSuggestionsFor("   sync")
+	got := commandSuggestionsFor("   sync", testTR)
 	if len(got) != 1 || got[0].Complete != "sync" {
 		t.Fatalf("want 1 sync match, got %+v", got)
 	}

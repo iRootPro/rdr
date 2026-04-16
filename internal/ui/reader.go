@@ -6,9 +6,12 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/rdr/internal/db"
+	"github.com/iRootPro/rdr/internal/i18n"
 )
 
 // readerMaxContentWidth caps the reader body so long articles stay
@@ -17,43 +20,63 @@ import (
 const readerMaxContentWidth = 85
 
 var (
-	readerTitleLarge = lipgloss.NewStyle().
-				Foreground(colorAccent).
-				Bold(true)
+	readerTitleLarge lipgloss.Style
+	readerSource     lipgloss.Style
+	readerMetaMuted  lipgloss.Style
+	readerMetaURL    lipgloss.Style
+	readerBody       lipgloss.Style
+	readerEmptyBox   lipgloss.Style
+	readerEmptyCTA   lipgloss.Style
+)
 
-	readerSource = lipgloss.NewStyle().Foreground(colorGreen)
+func init() {
+	rebuildReaderStyles()
+	registerStyleRebuild(rebuildReaderStyles)
+}
+
+func rebuildReaderStyles() {
+	readerTitleLarge = lipgloss.NewStyle().
+		Foreground(colorAccent).
+		Background(colorBG).
+		Bold(true)
+
+	readerSource = lipgloss.NewStyle().Foreground(colorGreen).Background(colorBG)
 
 	readerMetaMuted = lipgloss.NewStyle().
-			Foreground(colorMuted)
+		Foreground(colorMuted).
+		Background(colorBG)
 
-	// URL on its own line — teal but without the loud underline that
-	// previously competed with the title for visual weight.
-	readerMetaURL = lipgloss.NewStyle().Foreground(colorTeal)
+	readerMetaURL = lipgloss.NewStyle().Foreground(colorTeal).Background(colorBG)
 
-	readerBody = lipgloss.NewStyle().Foreground(colorText)
+	readerBody = lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
 
 	readerEmptyBox = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBorder).
-			Padding(1, 3).
-			Foreground(colorText)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBorder).
+		Background(colorBG).
+		Padding(1, 3).
+		Foreground(colorText)
 
 	readerEmptyCTA = lipgloss.NewStyle().
-			Foreground(colorAccent).
-			Bold(true)
-)
+		Foreground(colorAccent).
+		Background(colorBG).
+		Bold(true)
+}
 
 // buildReaderContent is the entry point used by the model. It delegates
 // to layoutReader and keeps the original signature so every call-site in
 // model.go / search.go stays unchanged.
-func buildReaderContent(a db.Article, feedName string, width int, showImages bool) string {
-	return layoutReader(a, feedName, width, showImages)
+func buildReaderContent(a db.Article, feedName, feedURL string, width int, showImages bool, tr *i18n.Strings) string {
+	if tr == nil {
+		tr = i18n.For(i18n.EN)
+	}
+	return layoutReader(a, feedName, feedURL, width, showImages, tr)
 }
 
 // layoutReader renders the full reader string and, when the available
 // outer width exceeds readerMaxContentWidth, horizontally centres it by
 // left-padding every line. Narrow terminals fall through untouched.
-func layoutReader(a db.Article, feedName string, outerWidth int, showImages bool) string {
+func layoutReader(a db.Article, feedName, feedURL string, outerWidth int, showImages bool, tr *i18n.Strings) string {
 	contentW := outerWidth
 	if contentW > readerMaxContentWidth {
 		contentW = readerMaxContentWidth
@@ -62,7 +85,7 @@ func layoutReader(a db.Article, feedName string, outerWidth int, showImages bool
 		contentW = 20
 	}
 
-	body := renderReaderBody(a, feedName, contentW, showImages)
+	body := renderReaderBody(a, feedName, feedURL, contentW, showImages, tr)
 
 	if outerWidth > contentW {
 		indent := (outerWidth - contentW) / 2
@@ -76,13 +99,28 @@ func layoutReader(a db.Article, feedName string, outerWidth int, showImages bool
 		}
 		body = strings.Join(lines, "\n")
 	}
-	return body
+	return fillBackground(body, outerWidth)
+}
+
+// fillBackground ensures every line has the theme background across its
+// full width. It prepends the ANSI bg-set sequence so that any mid-line
+// resets (from glamour, lipgloss, etc.) still start on the right bg,
+// and pads the line to the target width.
+func fillBackground(content string, width int) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = paintLineBG(line, width)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderReaderBody builds the reader content at a fixed content width.
 // All typography decisions live here so layoutReader can stay a thin
 // centring wrapper.
-func renderReaderBody(a db.Article, feedName string, contentW int, showImages bool) string {
+func renderReaderBody(a db.Article, feedName, feedURL string, contentW int, showImages bool, tr *i18n.Strings) string {
+	if tr == nil {
+		tr = i18n.For(i18n.EN)
+	}
 	var b strings.Builder
 
 	// Title block — a blank line above plus bold accent gives the title
@@ -93,12 +131,12 @@ func renderReaderBody(a db.Article, feedName string, contentW int, showImages bo
 
 	// Meta: source + time + (optional) reading time, divided by
 	// double-padded middots.
-	metaParts := []string{readerSource.Render(feedName)}
-	if ago := timeAgo(a.PublishedAt); ago != "" {
-		metaParts = append(metaParts, readerMetaMuted.Render(ago))
+	metaParts := []string{readerSource.Render(feedIcon(feedURL, feedName) + " " + feedName)}
+	if ago := timeAgo(a.PublishedAt, tr); ago != "" {
+		metaParts = append(metaParts, readerMetaMuted.Render("\uf64f "+ago))
 	}
-	if rt := readingTime(a); rt != "" {
-		metaParts = append(metaParts, readerMetaMuted.Render(rt))
+	if rt := readingTime(a, tr); rt != "" {
+		metaParts = append(metaParts, readerMetaMuted.Render("\U000f05cd "+rt))
 	}
 	b.WriteString(strings.Join(metaParts, readerMetaMuted.Render("  ·  ")))
 	b.WriteString("\n")
@@ -148,11 +186,11 @@ func renderReaderBody(a db.Article, feedName string, contentW int, showImages bo
 		b.WriteString("\n\n")
 		b.WriteString(readerMetaMuted.Render(strings.Repeat("─", contentW)))
 		b.WriteString("\n")
-		hint := readerEmptyCTA.Render("Press [f]") +
-			readerMetaMuted.Render(" to load the full article")
+		hint := readerEmptyCTA.Render(tr.Reader.PressF) +
+			readerMetaMuted.Render(tr.Reader.LoadFullSuffix)
 		b.WriteString(hint)
 	default:
-		b.WriteString(renderEmptyReader(a, contentW))
+		b.WriteString(renderEmptyReader(a, contentW, tr))
 	}
 	return b.String()
 }
@@ -178,7 +216,7 @@ func articlePreviewText(a db.Article) string {
 // user to press [f] to pull the article body. Any fallback metadata
 // (feed items with just "Points: N" stubs in Content) is shown dim and
 // centred below the box.
-func renderEmptyReader(a db.Article, contentW int) string {
+func renderEmptyReader(a db.Article, contentW int, tr *i18n.Strings) string {
 	boxW := 50
 	if contentW < boxW+6 {
 		boxW = contentW - 6
@@ -189,10 +227,10 @@ func renderEmptyReader(a db.Article, contentW int) string {
 
 	inside := strings.Join([]string{
 		"",
-		"This article has no full body loaded yet.",
+		tr.Reader.EmptyHeadline,
 		"",
-		readerEmptyCTA.Render("Press [f]") + " to fetch & render it",
-		"with the readability extractor.",
+		readerEmptyCTA.Render(tr.Reader.PressF) + tr.Reader.PressFSuffix,
+		tr.Reader.PressFSuffix2,
 		"",
 	}, "\n")
 	box := readerEmptyBox.Width(boxW).Render(inside)
@@ -264,7 +302,10 @@ func sanitizeArticleMarkdown(md string, showImages bool) string {
 // readingTime returns a human label like "5 min read" estimated at 200
 // words per minute. Prefers the cached body; falls back to content then
 // description. Returns "" when there's nothing to count (e.g. HN stubs).
-func readingTime(a db.Article) string {
+func readingTime(a db.Article, tr *i18n.Strings) string {
+	if tr == nil {
+		tr = i18n.For(i18n.EN)
+	}
 	source := a.CachedBody
 	if source == "" {
 		source = a.Content
@@ -287,7 +328,7 @@ func readingTime(a db.Article) string {
 	if mins < 1 {
 		mins = 1
 	}
-	return fmt.Sprintf("%d min read", mins)
+	return fmt.Sprintf(tr.Reader.MinReadFmt, mins)
 }
 
 func renderMarkdown(md string, width int) (string, error) {
@@ -295,7 +336,7 @@ func renderMarkdown(md string, width int) (string, error) {
 		width = 20
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStyles(glamourStyleConfig()),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {
@@ -307,6 +348,45 @@ func renderMarkdown(md string, width int) (string, error) {
 	}
 	return strings.TrimRight(out, "\n"), nil
 }
+
+func glamourStyleConfig() ansi.StyleConfig {
+	var cfg ansi.StyleConfig
+	if glamourStyle == "light" {
+		cfg = styles.LightStyleConfig
+	} else {
+		cfg = styles.DarkStyleConfig
+	}
+	bg := string(colorBG)
+	cfg.Document.Margin = uintPtr(0)
+	cfg.Document.StylePrimitive.BackgroundColor = &bg
+	cfg.Paragraph.StylePrimitive.BackgroundColor = &bg
+	cfg.BlockQuote.StylePrimitive.BackgroundColor = &bg
+	cfg.List.StyleBlock.StylePrimitive.BackgroundColor = &bg
+	cfg.Item.BackgroundColor = &bg
+	cfg.Heading.StylePrimitive.BackgroundColor = &bg
+	cfg.H1.StylePrimitive.BackgroundColor = &bg
+	cfg.H2.StylePrimitive.BackgroundColor = &bg
+	cfg.H3.StylePrimitive.BackgroundColor = &bg
+	cfg.H4.StylePrimitive.BackgroundColor = &bg
+	cfg.H5.StylePrimitive.BackgroundColor = &bg
+	cfg.H6.StylePrimitive.BackgroundColor = &bg
+	cfg.Emph.BackgroundColor = &bg
+	cfg.Strong.BackgroundColor = &bg
+	cfg.Link.BackgroundColor = &bg
+	cfg.LinkText.BackgroundColor = &bg
+	cfg.Code.StylePrimitive.BackgroundColor = &bg
+	cfg.HorizontalRule.BackgroundColor = &bg
+	if cfg.CodeBlock.Chroma != nil {
+		cfg.CodeBlock.Chroma.Background = ansi.StylePrimitive{
+			BackgroundColor: &bg,
+		}
+	}
+	cfg.CodeBlock.StyleBlock.StylePrimitive.BackgroundColor = &bg
+	cfg.Table.StyleBlock.StylePrimitive.BackgroundColor = &bg
+	return cfg
+}
+
+func uintPtr(u uint) *uint { return &u }
 
 var (
 	reTag     = regexp.MustCompile(`<[^>]+>`)
@@ -394,6 +474,15 @@ func readerFeedName(feeds []db.Feed, feedID int64) string {
 	for _, f := range feeds {
 		if f.ID == feedID {
 			return f.Name
+		}
+	}
+	return ""
+}
+
+func readerFeedURL(feeds []db.Feed, feedID int64) string {
+	for _, f := range feeds {
+		if f.ID == feedID {
+			return f.URL
 		}
 	}
 	return ""

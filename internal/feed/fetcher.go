@@ -56,6 +56,11 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 		return FetchResult{}, fmt.Errorf("parse feed: %w", err)
 	}
 
+	// Snapshot the fetch start time before any upserts so TrimArticles
+	// can protect anything touched by this cycle. Articles upserted
+	// below will have last_fetched_at >= fetchStart.
+	fetchStart := time.Now().UTC()
+
 	result := FetchResult{Feed: feed}
 	for _, item := range parsed.Items {
 		article := mapItem(feed.ID, item)
@@ -71,7 +76,7 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 	}
 	// Trim failure is fatal for now — there's no logger wired up, and silent
 	// swallow is worse than propagating. Revisit once Fetcher has warnings.
-	if err := f.db.TrimArticles(feed.ID, f.maxArticlesPerFeed()); err != nil {
+	if err := f.db.TrimArticles(feed.ID, f.maxArticlesPerFeed(), fetchStart); err != nil {
 		return FetchResult{}, fmt.Errorf("trim: %w", err)
 	}
 	return result, nil

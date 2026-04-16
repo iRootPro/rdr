@@ -110,7 +110,7 @@ func (m Model) updateLinks(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if err := openInBrowser(url); err != nil {
 			m.err = err
 		} else {
-			m.status = "opened: " + truncate(url, 40)
+			m.status = fmt.Sprintf(m.tr.Toasts.OpenedFmt, truncate(url, 40))
 		}
 		m.focus = focusReader
 		m.links = nil
@@ -135,7 +135,7 @@ func (m Model) openLinkPickerOnCurrent() (tea.Model, tea.Cmd) {
 	}
 	links := extractLinks(source)
 	if len(links) == 0 {
-		m.status = "no links in article"
+		m.status = m.tr.Toasts.NoLinksInArticle
 		return m, nil
 	}
 	m.links = links
@@ -145,14 +145,26 @@ func (m Model) openLinkPickerOnCurrent() (tea.Model, tea.Cmd) {
 }
 
 var (
-	linkPickerTitle = lipgloss.NewStyle().
-			Foreground(colorAccent).
-			Bold(true).
-			Padding(0, 0, 1, 0)
-
-	linkPickerText = lipgloss.NewStyle().Foreground(colorText)
-	linkPickerURL  = lipgloss.NewStyle().Foreground(colorTeal).Underline(true)
+	linkPickerTitle lipgloss.Style
+	linkPickerText  lipgloss.Style
+	linkPickerURL   lipgloss.Style
 )
+
+func init() {
+	rebuildLinkPickerStyles()
+	registerStyleRebuild(rebuildLinkPickerStyles)
+}
+
+func rebuildLinkPickerStyles() {
+	linkPickerTitle = lipgloss.NewStyle().
+		Foreground(colorAccent).
+		Background(colorBG).
+		Bold(true).
+		Padding(0, 0, 1, 0)
+
+	linkPickerText = lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
+	linkPickerURL = lipgloss.NewStyle().Foreground(colorTeal).Background(colorBG).Underline(true)
+}
 
 func renderLinkPicker(m Model, width, height int) string {
 	innerW := width - 4
@@ -165,12 +177,13 @@ func renderLinkPicker(m Model, width, height int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(linkPickerTitle.Render(fmt.Sprintf("Links · %d", len(m.links))))
+	b.WriteString(linkPickerTitle.Render(fmt.Sprintf(m.tr.Links.TitleFmt, len(m.links))))
 	b.WriteString("\n")
 
 	if len(m.links) == 0 {
-		b.WriteString(readStyle.Render("(no links)"))
-		return paneActive.Width(width - 2).Height(innerH).Render(b.String())
+		b.WriteString(readStyle.Render(m.tr.Links.NoLinks))
+		c := fillBackground(b.String(), width-4)
+		return paneActive.Width(width - 2).Height(innerH).Render(c)
 	}
 
 	// Reserve space for two blank lines at bottom + help hint (3 rows).
@@ -221,7 +234,8 @@ func renderLinkPicker(m Model, width, height int) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(searchHint.Render("↑↓ navigate · enter open · esc back"))
+	b.WriteString(searchHint.Render(m.tr.Links.FooterHint))
 
-	return paneActive.Width(width - 2).Height(innerH).Render(b.String())
+	c := fillBackground(b.String(), width-4)
+	return paneActive.Width(width - 2).Height(innerH).Render(c)
 }

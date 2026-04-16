@@ -51,4 +51,23 @@ var migrations = []string{
 	ALTER TABLE feeds ADD COLUMN category TEXT NOT NULL DEFAULT '';
 	CREATE INDEX idx_feeds_category ON feeds(category);
 	`,
+	// 004: smart folders
+	`
+	CREATE TABLE smart_folders (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		name        TEXT NOT NULL,
+		query       TEXT NOT NULL,
+		position    INTEGER NOT NULL DEFAULT 0,
+		created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX idx_smart_folders_position ON smart_folders(position, id);
+	`,
+	// 005: track last_fetched_at so Trim does not delete articles that
+	// are still in the feed's current RSS response. Backfill existing
+	// rows with NOW so the first fetch after upgrade doesn't nuke them.
+	`
+	ALTER TABLE articles ADD COLUMN last_fetched_at DATETIME;
+	UPDATE articles SET last_fetched_at = CURRENT_TIMESTAMP;
+	CREATE INDEX idx_articles_last_fetched_at ON articles(last_fetched_at);
+	`,
 }
