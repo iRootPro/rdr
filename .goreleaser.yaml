@@ -1,0 +1,45 @@
+version: 2
+
+project_name: rdr
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: rdr
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - repository:
+      owner: iRootPro
+      name: homebrew-tap
+    homepage: "https://github.com/iRootPro/rdr"
+    description: "Terminal RSS/Atom reader with vim navigation, full article rendering and smart folders"
+    license: "MIT"
+    install: |
+      bin.install "rdr"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
