@@ -64,6 +64,7 @@ const (
 	focusLinks
 	focusHelp
 	focusCatalog
+	focusLangPicker
 )
 
 type settingsMode int
@@ -188,6 +189,7 @@ type Model struct {
 	settingsAfterSyncSel      int
 	catalogSel                int
 	catalogOnboarding         bool
+	langPickerSel             int
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
 	pendingName               string
@@ -364,6 +366,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.focus == focusCatalog {
 			return m.updateCatalog(msg)
+		}
+		if m.focus == focusLangPicker {
+			return m.updateLangPicker(msg)
 		}
 		// Digit prefixes accumulate vim-style counts for the next movement
 		// key. Only consumes bare digits (no modifier). 0 alone is ignored
@@ -665,16 +670,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.loadCurrentCmd()
 		}
-		// Onboarding: open catalog on first launch (no feeds).
+		// Onboarding: first launch (no feeds) — pick language first.
 		if len(m.feeds) == 0 && m.focus == focusFeeds {
-			// Auto-create default smart folders on first launch.
-			if len(m.smartFolders) == 0 {
-				seedSmartFolders(m.db, m.tr)
-				m.smartFolders, _ = m.db.ListSmartFolders()
-			}
-			m.focus = focusCatalog
-			m.catalogSel = 0
-			m.catalogOnboarding = true
+			m.focus = focusLangPicker
+			m.langPickerSel = 0
 		}
 		return m, nil
 
@@ -1786,6 +1785,11 @@ func (m Model) View() string {
 		label := fmt.Sprintf(m.tr.Status.HelpCrumbFmt, focusLabel(m.helpPrev, m.tr))
 		status := renderPowerline([]segment{appSegment(), {Text: label, FG: colorText, BG: colorAltBG}}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+	}
+
+	if m.focus == focusLangPicker {
+		body := renderLangPicker(m, m.width, m.height-2)
+		return body
 	}
 
 	if m.focus == focusCatalog {

@@ -257,6 +257,82 @@ func seedSmartFolders(database *db.DB, tr *i18n.Strings) {
 	}
 }
 
+// langOption is one row in the language picker.
+type langOption struct {
+	Lang    i18n.Lang
+	Label   string
+	Native  string
+}
+
+var langOptions = []langOption{
+	{i18n.EN, "English", "English"},
+	{i18n.RU, "Русский", "Russian"},
+}
+
+// renderLangPicker draws a centered language selection screen.
+func renderLangPicker(m Model, width, height int) string {
+	accent := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
+	text := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
+	muted := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
+
+	var b strings.Builder
+	b.WriteString("\n\n\n")
+	b.WriteString(accent.Render("  \U000f046b rdr"))
+	b.WriteString("\n\n")
+	b.WriteString(text.Render("  Choose your language / Выберите язык:"))
+	b.WriteString("\n\n")
+
+	for i, opt := range langOptions {
+		prefix := "    "
+		style := text
+		if i == m.langPickerSel {
+			prefix = "  › "
+			style = itemSelected
+		}
+		b.WriteString(prefix + style.Render(opt.Label) + "  " + muted.Render(opt.Native))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(muted.Render("  Enter — select"))
+
+	content := fillBackground(b.String(), width-4)
+	return paneActive.Width(width - 2).Height(height).Render(content)
+}
+
+// updateLangPicker handles keystrokes in the language picker.
+func (m Model) updateLangPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Down):
+		if m.langPickerSel < len(langOptions)-1 {
+			m.langPickerSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.langPickerSel > 0 {
+			m.langPickerSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		chosen := langOptions[m.langPickerSel]
+		m.lang = chosen.Lang
+		m.tr = i18n.For(chosen.Lang)
+		_ = m.db.SetLanguage(string(chosen.Lang))
+		// Now proceed to catalog with onboarding.
+		if len(m.smartFolders) == 0 {
+			seedSmartFolders(m.db, m.tr)
+			m.smartFolders, _ = m.db.ListSmartFolders()
+		}
+		m.focus = focusCatalog
+		m.catalogSel = 0
+		m.catalogOnboarding = true
+		return m, nil
+	case key.Matches(msg, m.keys.Quit):
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
 // updateCatalog handles keystrokes in the catalog overlay.
 func (m Model) updateCatalog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	total := catalogLen()
