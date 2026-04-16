@@ -666,6 +666,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Onboarding: open catalog on first launch (no feeds).
 		if len(m.feeds) == 0 && m.focus == focusFeeds {
+			// Auto-create default smart folders on first launch.
+			if len(m.smartFolders) == 0 {
+				seedSmartFolders(m.db, m.tr)
+				m.smartFolders, _ = m.db.ListSmartFolders()
+			}
 			m.focus = focusCatalog
 			m.catalogSel = 0
 		}
