@@ -1,5 +1,7 @@
 # rdr
 
+[English](README.en.md) | Русский
+
 Терминальная читалка RSS/Atom лент. Написана на Go с использованием [Bubble Tea](https://github.com/charmbracelet/bubbletea) и [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
 Vim-навигация, полнотекстовое чтение статей, умные папки, поиск с языком запросов, 4 цветовые темы, поддержка русской раскладки.
