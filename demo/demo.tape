@@ -62,16 +62,34 @@ Down
 Sleep 150ms
 Down
 Sleep 150ms
-Down
-Sleep 150ms
-Down
-Sleep 150ms
 
-# Load full article
+# Back to articles
+Escape
+Sleep 1s
+
+# ── Move to a Habr article (has full content to fetch) ──
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+
+# Open and load full article
+Enter
+Sleep 1.5s
 Type "f"
-Sleep 4s
+Sleep 5s
 
-# Scroll loaded content
+# Scroll loaded full article
+Down
+Sleep 150ms
+Down
+Sleep 150ms
 Down
 Sleep 150ms
 Down
