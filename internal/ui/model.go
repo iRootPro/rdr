@@ -1810,7 +1810,7 @@ func (m Model) View() string {
 		}
 	}
 
-	paneH := m.height - 4 - helpH - popupH
+	paneH := m.height - 2 - helpH - popupH
 
 	var row string
 	if m.zenMode {
