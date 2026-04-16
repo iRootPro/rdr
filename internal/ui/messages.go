@@ -84,3 +84,12 @@ type copiedMsg struct {
 type errMsg struct {
 	err error
 }
+
+type aiResultMsg struct {
+	kind    string // "translate" | "summarize"
+	content string
+}
+
+type aiErrorMsg struct {
+	err error
+}

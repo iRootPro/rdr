@@ -138,6 +138,21 @@ func (d *DB) SetAfterSyncCommands(cmds []string) error {
 	return d.SetSetting(settingKeyAfterSyncCommands, strings.Join(cmds, "\n"))
 }
 
+const (
+	settingKeyAIEndpoint = "ai_endpoint"
+	settingKeyAIKey      = "ai_api_key"
+	settingKeyAIModel    = "ai_model"
+)
+
+func (d *DB) GetAIEndpoint() (string, error) { return d.GetSetting(settingKeyAIEndpoint) }
+func (d *DB) SetAIEndpoint(v string) error   { return d.SetSetting(settingKeyAIEndpoint, v) }
+
+func (d *DB) GetAIKey() (string, error) { return d.GetSetting(settingKeyAIKey) }
+func (d *DB) SetAIKey(v string) error   { return d.SetSetting(settingKeyAIKey, v) }
+
+func (d *DB) GetAIModel() (string, error) { return d.GetSetting(settingKeyAIModel) }
+func (d *DB) SetAIModel(v string) error   { return d.SetSetting(settingKeyAIModel, v) }
+
 func boolToStr(v bool) string {
 	if v {
 		return "true"
