@@ -105,6 +105,7 @@ type SettingsStrings struct {
 	AfterSyncEdit  string
 	NoAfterSync    string
 
+	AIProviderLabel string
 	AIEndpointLabel string
 	AIKeyLabel      string
 	AIModelLabel    string
@@ -482,11 +483,12 @@ var en = Strings{
 		AfterSyncEdit:  "Edit command:",
 		NoAfterSync:    "No after-sync commands",
 
-		AIEndpointLabel: "AI Endpoint",
-		AIKeyLabel:      "AI API Key",
-		AIModelLabel:    "AI Model",
-		AIHint:          "e edit · tab section · esc close",
-		AINotConfigured: "Not configured — set endpoint and model to enable AI features (translate, summarize)",
+		AIProviderLabel: "Provider",
+		AIEndpointLabel: "Endpoint",
+		AIKeyLabel:      "API Key",
+		AIModelLabel:    "Model",
+		AIHint:          "enter toggle/edit · tab section · esc close",
+		AINotConfigured: "Not configured — choose provider and set up to enable translation and summarization",
 	},
 	Help: HelpStrings{
 		TitleFmt:        "rdr · help · %s",
@@ -861,11 +863,12 @@ var ru = Strings{
 		AfterSyncEdit:  "Редактировать команду:",
 		NoAfterSync:    "Нет автокоманд",
 
-		AIEndpointLabel: "AI Endpoint",
-		AIKeyLabel:      "AI API Key",
-		AIModelLabel:    "AI Модель",
-		AIHint:          "e редактировать · tab раздел · esc закрыть",
-		AINotConfigured: "Не настроен — укажите endpoint и модель для перевода и суммаризации статей",
+		AIProviderLabel: "Провайдер",
+		AIEndpointLabel: "Endpoint",
+		AIKeyLabel:      "API Key",
+		AIModelLabel:    "Модель",
+		AIHint:          "enter переключить/править · tab раздел · esc закрыть",
+		AINotConfigured: "Не настроен — выберите провайдер и настройте для перевода и суммаризации",
 	},
 	Help: HelpStrings{
 		TitleFmt:        "rdr · справка · %s",

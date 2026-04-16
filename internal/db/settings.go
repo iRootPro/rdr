@@ -139,10 +139,14 @@ func (d *DB) SetAfterSyncCommands(cmds []string) error {
 }
 
 const (
+	settingKeyAIProvider = "ai_provider"
 	settingKeyAIEndpoint = "ai_endpoint"
 	settingKeyAIKey      = "ai_api_key"
 	settingKeyAIModel    = "ai_model"
 )
+
+func (d *DB) GetAIProvider() (string, error) { return d.GetSetting(settingKeyAIProvider) }
+func (d *DB) SetAIProvider(v string) error   { return d.SetSetting(settingKeyAIProvider, v) }
 
 func (d *DB) GetAIEndpoint() (string, error) { return d.GetSetting(settingKeyAIEndpoint) }
 func (d *DB) SetAIEndpoint(v string) error   { return d.SetSetting(settingKeyAIEndpoint, v) }
