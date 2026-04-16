@@ -5,23 +5,27 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/iRootPro/rdr/internal/i18n"
 )
 
 // renderFeedList draws the unified feeds pane: smart folders at the top with
 // an icon prefix, then a subtle separator, then regular feeds with unread
 // counters. Selection highlights the currently active row.
-func renderFeedList(entries []feedEntry, selected int, active bool, width, height int) string {
+func renderFeedList(entries []feedEntry, selected int, active bool, width, height int, tr *i18n.Strings) string {
+	if tr == nil {
+		tr = i18n.For(i18n.EN)
+	}
+	title := "\U000f046b " + tr.Feeds.PaneTitle // 󰑫
 	var b strings.Builder
-	b.WriteString(paneTitle.Render("Feeds"))
-	b.WriteString("\n")
 
 	if len(entries) == 0 {
-		b.WriteString(readStyle.Render("(no feeds)"))
-		return framePane(b.String(), active, width, height)
+		b.WriteString(readStyle.Render(tr.Feeds.NoFeeds))
+		return framePaneWithTitle(b.String(), title, active, width, height)
 	}
 
-	// Inner text area after pane border (2) + padding (2) = width - 4.
-	inner := width - 4
+	// Inner text area = width - 2 (1-cell padding each side inside border).
+	inner := width - 2
 	if inner < 1 {
 		inner = 1
 	}
@@ -73,20 +77,26 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		if showSeparator && i == firstBreakIdx {
 			sep := lipgloss.NewStyle().
 				Foreground(colorBorder).
+				Background(colorBG).
 				Render(strings.Repeat("─", nameCellW+counterCol))
 			b.WriteString(sep)
 			b.WriteString("\n")
 			rowsUsed++
 		}
 
+		rowBG := colorBG
+		if i == selected && active {
+			rowBG = colorAltBG
+		}
+
 		prefix := "  "
-		nameStyle := lipgloss.NewStyle()
+		nameStyle := lipgloss.NewStyle().Foreground(colorText).Background(rowBG)
 		if i == selected {
 			prefix = "› "
 			if active {
-				nameStyle = itemSelected
+				nameStyle = itemSelected.Background(rowBG)
 			} else {
-				nameStyle = itemSelectedInactive
+				nameStyle = itemSelectedInactive.Background(rowBG)
 			}
 		}
 
@@ -94,50 +104,43 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		iconCells := 0
 		switch e.Kind {
 		case entryFolder:
-			icon = lipgloss.NewStyle().Foreground(colorTeal).Render("◉ ")
+			icon = lipgloss.NewStyle().Foreground(colorTeal).Background(rowBG).Render("◉ ")
 			iconCells = 2
 		case entryCategory:
 			marker := "▼ "
 			if e.Collapsed {
 				marker = "▶ "
 			}
-			icon = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(marker)
+			icon = lipgloss.NewStyle().Foreground(colorAccent).Background(rowBG).Bold(true).Render(marker)
 			iconCells = 2
-			// Category headers read as section labels — accent + bold
-			// sets them apart from the regular feed rows below.
 			if i != selected {
-				nameStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
+				nameStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(rowBG).Bold(true)
 			}
 		case entryFeed:
-			// Feeds are children of the category above them. Use a 4-cell
-			// indent instead of the 2-cell one used by folders/categories
-			// so the parent/child relationship is visually obvious.
-			icon = "    "
+			fi := feedIcon(e.FeedURL, e.Name)
+			icon = lipgloss.NewStyle().Foreground(colorMuted).Background(rowBG).Render("  "+fi+" ")
 			iconCells = 4
 			if e.HasError {
-				icon = errStyle.Render("  ● ")
+				icon = lipgloss.NewStyle().Foreground(colorRed).Background(rowBG).Render("  "+fi+" ")
 				iconCells = 4
 			}
 		}
 
-		// prefix always 2 visible cells.
 		nameBudget := nameCellW - 2 - iconCells
 		if nameBudget < 1 {
 			nameBudget = 1
 		}
-		name := nameStyle.Render(prefix + icon + truncate(e.Name, nameBudget))
+		prefixRendered := lipgloss.NewStyle().Background(rowBG).Render(prefix)
+		nameText := nameStyle.Render(truncate(e.Name, nameBudget))
+		name := prefixRendered + icon + nameText
 
 		counter := ""
 		if e.UnreadCount > 0 {
-			counter = counterStyle.Render(fmt.Sprintf("%d", e.UnreadCount))
+			counter = lipgloss.NewStyle().Foreground(colorGreen).Background(rowBG).Render(fmt.Sprintf("%d", e.UnreadCount))
 		}
 
-		nameCellStyle := lipgloss.NewStyle().Width(nameCellW)
-		counterCellStyle := lipgloss.NewStyle().Width(counterCol).Align(lipgloss.Right)
-		if i == selected && active {
-			nameCellStyle = nameCellStyle.Background(colorAltBG)
-			counterCellStyle = counterCellStyle.Background(colorAltBG)
-		}
+		nameCellStyle := lipgloss.NewStyle().Width(nameCellW).Background(rowBG)
+		counterCellStyle := lipgloss.NewStyle().Width(counterCol).Align(lipgloss.Right).Background(rowBG)
 		nameCell := nameCellStyle.Render(name)
 		counterCell := counterCellStyle.Render(counter)
 
@@ -155,7 +158,7 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		rowsUsed++
 	}
 
-	return framePane(b.String(), active, width, height)
+	return framePaneWithTitle(b.String(), title, active, width, height)
 }
 
 func maxEntryCounterWidth(entries []feedEntry) int {
@@ -173,8 +176,8 @@ func maxEntryCounterWidth(entries []feedEntry) int {
 }
 
 func listVisibleRows(paneHeight int) int {
-	// Pane border (2) + title row (1) + padding-below-title (1) = 4 rows overhead.
-	n := paneHeight - 4
+	// Title now lives in the border, so overhead = 0 (border is outside height).
+	n := paneHeight
 	if n < 1 {
 		return 1
 	}
@@ -197,20 +200,89 @@ func visibleWindow(total, selected, maxVisible int) (start, end int) {
 	return start, end
 }
 
-func framePane(content string, active bool, width, height int) string {
-	style := paneInactive
+// framePaneWithTitle renders content inside a bordered pane with the title
+// embedded in the top border line, lazygit-style:
+//
+//	╭─ 󰑫 Ленты ──────────╮
+//	│ content               │
+//	╰───────────────────────╯
+// framePaneWithTitle draws a bordered pane. width/height are the CONTENT
+// dimensions (same semantics as lipgloss Width before). The function adds
+// border chars (+2 cols, +2 rows) and 1-cell padding on each side.
+func framePaneWithTitle(content, title string, active bool, width, height int) string {
+	borderColor := colorBorder
 	if active {
-		style = paneActive
+		borderColor = colorAccent
 	}
-	return style.Width(width).Height(height).Render(content)
+	bs := lipgloss.NewStyle().Foreground(borderColor).Background(colorBG)
+	ts := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
+	pad := lipgloss.NewStyle().Background(colorBG)
+
+	// innerW = width of the horizontal dash run between ╭ and ╮.
+	// This equals the content width passed in (matches old lipgloss Width
+	// semantics where Width = content area, border added on top).
+	innerW := width
+	if innerW < 4 {
+		innerW = 4
+	}
+
+	// ── top border ──
+	var top string
+	if title != "" {
+		titleStr := " " + title + " "
+		titleCells := lipgloss.Width(titleStr)
+		dashesAfter := innerW - 1 - titleCells
+		if dashesAfter < 0 {
+			dashesAfter = 0
+		}
+		top = bs.Render("╭─") + ts.Render(titleStr) +
+			bs.Render(strings.Repeat("─", dashesAfter)+"╮")
+	} else {
+		top = bs.Render("╭" + strings.Repeat("─", innerW) + "╮")
+	}
+
+	// ── bottom border ──
+	bottom := bs.Render("╰" + strings.Repeat("─", innerW) + "╯")
+
+	// ── content lines ──
+	// Each row: │ + 1 pad + content + 1 pad + │
+	// So visible content per row = innerW - 2.
+	contentW := innerW - 2
+	if contentW < 1 {
+		contentW = 1
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+
+	border := bs.Render("│")
+	space := pad.Render(" ")
+	rows := make([]string, len(lines))
+	for i, line := range lines {
+		// Fill the line to contentW using paintLineBG which handles
+		// ANSI resets properly and pads with theme background.
+		filled := paintLineBG(line, contentW)
+		rows[i] = border + space + filled + space + border
+	}
+
+	all := make([]string, 0, len(rows)+2)
+	all = append(all, top)
+	all = append(all, rows...)
+	all = append(all, bottom)
+	return strings.Join(all, "\n")
 }
 
 func truncate(s string, max int) string {
 	if max <= 1 {
 		return "…"
 	}
-	if len(s) <= max {
+	runes := []rune(s)
+	if len(runes) <= max {
 		return s
 	}
-	return s[:max-1] + "…"
+	return string(runes[:max-1]) + "…"
 }

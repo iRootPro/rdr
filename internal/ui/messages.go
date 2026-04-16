@@ -56,6 +56,10 @@ type allArticlesLoadedMsg struct {
 	articles []db.Article
 }
 
+type smartFoldersLoadedMsg struct {
+	folders []db.SmartFolder
+}
+
 type batchAppliedMsg struct {
 	action string // "read" | "unread" | "star" | "unstar"
 	count  int

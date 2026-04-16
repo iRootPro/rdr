@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,9 +15,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/iRootPro/rdr/internal/config"
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
+	"github.com/iRootPro/rdr/internal/i18n"
 )
 
 // entryKind tags a row in the unified feed list: smart folder, category
@@ -36,6 +37,7 @@ type feedEntry struct {
 
 	// Feed-only:
 	FeedID      int64
+	FeedURL     string
 	UnreadCount int
 	HasError    bool
 
@@ -70,7 +72,39 @@ const (
 	smAddName
 	smAddURL
 	smRename
+	smCategory
+	smCategoryPicker
+	smImport
+	smExport
+	smSmartFolderAddName
+	smSmartFolderAddQuery
+	smSmartFolderEditName
+	smSmartFolderEditQuery
+	smFolderRename
 )
+
+type settingsSection int
+
+const (
+	secFeeds settingsSection = iota
+	secGeneral
+	secFolders
+	secSmartFolders
+)
+
+// availableLangs is the fixed list of languages the General settings pane
+// lets the user cycle through. Order matters — this is also the cursor
+// index space for the Language selector.
+var availableLangs = []i18n.Lang{i18n.EN, i18n.RU}
+
+func langDisplayName(l i18n.Lang) string {
+	switch l {
+	case i18n.RU:
+		return "Русский"
+	default:
+		return "English"
+	}
+}
 
 type articleFilter = db.ArticleFilter
 
@@ -80,14 +114,30 @@ const (
 	filterStarred = db.FilterStarred
 )
 
-func filterLabel(f articleFilter) string {
+// batchActionLabel maps the internal batch action id ("read", "unread",
+// "star", "unstar") to a short localized label used in the toast.
+func batchActionLabel(action string, tr *i18n.Strings) string {
+	switch action {
+	case "read":
+		return tr.Toasts.MarkedRead
+	case "unread":
+		return tr.Toasts.MarkedUnread
+	case "star":
+		return tr.Toasts.Starred
+	case "unstar":
+		return tr.Toasts.Unstarred
+	}
+	return action
+}
+
+func filterLabel(f articleFilter, tr *i18n.Strings) string {
 	switch f {
 	case filterUnread:
-		return "unread"
+		return tr.Filters.Unread
 	case filterStarred:
-		return "starred"
+		return tr.Filters.Starred
 	default:
-		return "all"
+		return tr.Filters.All
 	}
 }
 
@@ -96,8 +146,11 @@ type Model struct {
 	fetcher *feed.Fetcher
 	keys    keyMap
 
+	tr   *i18n.Strings
+	lang i18n.Lang
+
 	feeds        []db.Feed
-	smartFolders []config.SmartFolder
+	smartFolders []db.SmartFolder
 	articles     []db.Article
 	selEntry     int
 	selArt       int
@@ -122,10 +175,15 @@ type Model struct {
 
 	feedErrors map[int64]error
 
-	settingsMode  settingsMode
-	settingsSel   int
-	settingsInput textinput.Model
-	pendingName   string
+	settingsMode              settingsMode
+	settingsSection           settingsSection
+	settingsSel               int
+	settingsGeneralSel        int
+	settingsFolderSel         int
+	settingsSmartFolderSel    int
+	settingsCategoryPickerSel int
+	settingsInput             textinput.Model
+	pendingName               string
 
 	searchInput   textinput.Model
 	searchAll     []db.SearchItem
@@ -138,6 +196,15 @@ type Model struct {
 	filter            articleFilter
 	zenMode           bool
 	showImages        bool
+	showPreview       bool
+	themeName         string
+
+	// Visual selection mode (vim-style) for the articles pane. When
+	// active, j/k auto-extend a range anchored at visualAnchor, and
+	// actions (x/m/y/Y) apply to every article in the range instead of
+	// just the one under the cursor.
+	visualMode   bool
+	visualAnchor int
 	afterSyncCommands []string
 	refreshInterval   time.Duration
 	home              string
@@ -177,37 +244,39 @@ type Model struct {
 	err    error
 }
 
-func New(database *db.DB, fetcher *feed.Fetcher, smartFolders []config.SmartFolder, afterSyncCommands []string, refreshIntervalMinutes int, home string) Model {
+func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, refreshIntervalMinutes int, home string, lang i18n.Lang, showImages bool, sortField string, sortReverse bool, showPreview bool, themeName string) Model {
+	smartFolders, _ := database.ListSmartFolders()
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(colorAccent)
+	s.Style = lipgloss.NewStyle()
 
 	h := help.New()
-	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(colorAccent)
-	h.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colorMuted)
-	h.Styles.FullKey = lipgloss.NewStyle().Foreground(colorAccent)
-	h.Styles.FullDesc = lipgloss.NewStyle().Foreground(colorMuted)
+	applyHelpModelStyles(&h)
 
 	ti := textinput.New()
 	ti.CharLimit = 256
 	ti.Prompt = "› "
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent)
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
 
 	si := textinput.New()
 	si.CharLimit = 128
 	si.Prompt = "› "
-	si.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent)
+	si.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
 
 	ci := textinput.New()
 	ci.CharLimit = 128
 	ci.Prompt = ":"
-	ci.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent)
+	ci.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+
+	tr := i18n.For(lang)
 
 	return Model{
 		db:       database,
 		fetcher:  fetcher,
-		keys:     defaultKeys(),
-		status:   "fetching…",
+		tr:       tr,
+		lang:     lang,
+		keys:     defaultKeys(tr),
+		status:   tr.Status.Fetching,
 		spin:     s,
 		fetching: true,
 		reader:        viewport.New(0, 0),
@@ -223,7 +292,11 @@ func New(database *db.DB, fetcher *feed.Fetcher, smartFolders []config.SmartFold
 		commandInput:      ci,
 		commandHistory:    readHistoryFile(home),
 		historyPos:        -1,
-		sortField:         "date",
+		showImages:        showImages,
+		sortField:         sortField,
+		sortReverse:       sortReverse,
+		showPreview:       showPreview,
+		themeName:         themeName,
 	}
 }
 
@@ -261,7 +334,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reader.Height = m.height - 2
 		if m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.showImages))
+			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
 		}
 		return m, nil
 
@@ -324,6 +398,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.switchFilter(filterStarred)
 		case key.Matches(msg, m.keys.NextUnread):
 			return m.jumpToNextUnread()
+		case msg.String() == "p":
+			if m.focus == focusFeeds || m.focus == focusArticles {
+				m.showPreview = !m.showPreview
+				if m.db != nil {
+					_ = m.db.SetShowPreview(m.showPreview)
+				}
+				label := m.tr.Status.PreviewOff
+				if m.showPreview {
+					label = m.tr.Status.PreviewOn
+				}
+				return m, m.showToast(label)
+			}
+			return m, nil
+		case msg.String() == "v":
+			if m.focus == focusArticles && len(m.articles) > 0 && !m.visualMode {
+				m.visualMode = true
+				m.visualAnchor = m.selArt
+				return m, nil
+			}
+			return m, nil
 		case key.Matches(msg, m.keys.Command):
 			m.commandPrev = m.focus
 			m.focus = focusCommand
@@ -337,7 +431,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.FullArticle):
 			if m.focus == focusReader && m.readerArt != nil && m.readerArt.URL != "" && !m.fetching {
-				tick := m.startBusy("loading full article…")
+				tick := m.startBusy(m.tr.Status.LoadingFullArticle)
 				return m, tea.Batch(
 					fetchFullCmd(m.fetcher, m.db, m.readerArt.ID, m.readerArt.URL),
 					tick,
@@ -432,6 +526,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.Left), key.Matches(msg, m.keys.Back):
+			// Visual mode swallows esc to cancel selection rather than
+			// falling through to the pane-back handler.
+			if m.visualMode && m.focus == focusArticles {
+				m.visualMode = false
+				m.visualAnchor = 0
+				return m, nil
+			}
 			switch m.focus {
 			case focusArticles:
 				m.focus = focusFeeds
@@ -477,9 +578,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.syncTotal = len(m.feeds)
-			label := "syncing…"
+			label := m.tr.Status.Syncing
 			if m.syncTotal > 0 {
-				label = fmt.Sprintf("syncing %d feeds…", m.syncTotal)
+				label = fmt.Sprintf(m.tr.Status.SyncingNFmt, m.syncTotal)
 			}
 			tick := m.startBusy(label)
 			return m, tea.Batch(fetchAllCmd(m.fetcher), tick)
@@ -507,30 +608,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			added += r.Added
 		}
-		feedLabel := "feeds"
-		if len(msg.results) == 1 {
-			feedLabel = "feed"
-		}
-		artLabel := "new articles"
-		if added == 1 {
-			artLabel = "new article"
-		}
 		var toastMsg string
 		switch {
 		case failed > 0 && added > 0:
-			toastMsg = fmt.Sprintf("synced %d %s · %d %s · %d error(s)",
-				len(msg.results), feedLabel, added, artLabel, failed)
+			toastMsg = fmt.Sprintf(m.tr.Toasts.SyncedOkErrFmt, len(msg.results), added, failed)
 		case failed > 0:
-			toastMsg = fmt.Sprintf("synced %d %s · %d error(s)",
-				len(msg.results), feedLabel, failed)
+			toastMsg = fmt.Sprintf(m.tr.Toasts.SyncedErr, len(msg.results), failed)
 		case added > 0:
-			toastMsg = fmt.Sprintf("synced %d %s · %d %s",
-				len(msg.results), feedLabel, added, artLabel)
+			toastMsg = fmt.Sprintf(m.tr.Toasts.SyncedOk, len(msg.results), added)
 		default:
-			toastMsg = fmt.Sprintf("synced %d %s · nothing new",
-				len(msg.results), feedLabel)
+			toastMsg = fmt.Sprintf(m.tr.Toasts.SyncedOkNothing, len(msg.results))
 		}
-		m.status = "ready"
+		m.status = m.tr.Status.Ready
 		m.syncTotal = 0
 		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db)}
 		if len(m.feeds) > 0 {
@@ -557,7 +646,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.feeds = msg.feeds
 		m.err = nil
 		if !m.fetching {
-			m.status = "ready"
+			m.status = m.tr.Status.Ready
 		}
 		total := len(m.entries())
 		if total > 0 {
@@ -610,6 +699,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshFolderCounts()
 		return m, nil
 
+	case smartFoldersLoadedMsg:
+		m.err = nil
+		m.smartFolders = msg.folders
+		m.refreshFolderCounts()
+		// Clamp cursor if the list shrank (e.g. after delete).
+		if m.settingsFolderSel >= len(m.smartFolders) && m.settingsFolderSel > 0 {
+			m.settingsFolderSel = len(m.smartFolders) - 1
+		}
+		if m.settingsFolderSel < 0 {
+			m.settingsFolderSel = 0
+		}
+		return m, nil
+
 	case refreshTickMsg:
 		// Re-arm the timer unconditionally; either way we want the next
 		// tick. Skip the fetch itself if one is already running.
@@ -618,7 +720,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, tick)
 		}
 		if !m.fetching {
-			spinTick := m.startBusy("auto-fetching…")
+			spinTick := m.startBusy(m.tr.Status.AutoFetching)
 			cmds = append(cmds, fetchAllCmd(m.fetcher), spinTick)
 		}
 		return m, tea.Batch(cmds...)
@@ -635,7 +737,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// otherwise clobber the "synced N feeds" toast with a misleading
 		// "read · 0 articles".
 		if msg.count > 0 {
-			cmds = append(cmds, m.showToast(fmt.Sprintf("%s · %d articles", msg.action, msg.count)))
+			cmds = append(cmds, m.showToast(fmt.Sprintf(m.tr.Toasts.BatchFmt, batchActionLabel(msg.action, m.tr), msg.count)))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -648,7 +750,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case copiedMsg:
 		m.err = nil
 		m.fetching = false
-		return m, m.showToast(fmt.Sprintf("copied %d %s", msg.count, msg.format))
+		return m, m.showToast(fmt.Sprintf(m.tr.Toasts.CopiedFmt, msg.count, msg.format))
 
 	case articleMarkedMsg:
 		m.err = nil
@@ -680,9 +782,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updateRead(m.readerArt)
 		}
 		m.refreshFolderCounts()
-		label := "marked read"
+		label := m.tr.Toasts.MarkedRead
 		if msg.unread {
-			label = "marked unread"
+			label = m.tr.Toasts.MarkedUnread
 		}
 		// Refresh the feed list so unread counters update. The current
 		// article list stays as-is (we already patched it) unless the
@@ -699,7 +801,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.loadCurrentCmd(); c != nil {
 			cmds = append(cmds, c)
 		}
-		cmds = append(cmds, m.showToast(fmt.Sprintf("marked %d read", msg.count)))
+		cmds = append(cmds, m.showToast(fmt.Sprintf(m.tr.Toasts.MarkedReadFmt, msg.count)))
 		return m, tea.Batch(cmds...)
 
 	case fullArticleLoadedMsg:
@@ -710,7 +812,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			now := time.Now().UTC()
 			m.readerArt.CachedAt = &now
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, m.reader.Width-4, m.showImages))
+			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
 			m.reader.GotoTop()
 		}
 		return m, nil
@@ -758,9 +861,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.refreshFolderCounts()
-		label := "★ starred"
+		label := m.tr.Toasts.Starred
 		if !msg.starred {
-			label = "unstarred"
+			label = m.tr.Toasts.Unstarred
 		}
 		cmds := []tea.Cmd{m.showToast(label)}
 		// If viewing the starred filter and we just unstarred, reload so the
@@ -781,6 +884,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.settingsMode == smCategoryPicker {
+		return m.updateSettingsCategoryPicker(msg)
+	}
 	if m.settingsMode != smList {
 		switch {
 		case key.Matches(msg, m.keys.Back):
@@ -796,12 +902,36 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Global keys that work on every section.
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 	case key.Matches(msg, m.keys.Settings), key.Matches(msg, m.keys.Back):
 		m.focus = focusFeeds
 		return m, nil
+	case key.Matches(msg, m.keys.Tab):
+		m.settingsSection = (m.settingsSection + 1) % 4
+		return m, nil
+	case key.Matches(msg, m.keys.Help):
+		m.helpPrev = m.focus
+		m.focus = focusHelp
+		return m, nil
+	}
+
+	switch m.settingsSection {
+	case secGeneral:
+		return m.updateSettingsGeneral(msg)
+	case secFolders:
+		return m.updateSettingsFolders(msg)
+	case secSmartFolders:
+		return m.updateSettingsSmartFolders(msg)
+	default:
+		return m.updateSettingsFeeds(msg)
+	}
+}
+
+func (m Model) updateSettingsFeeds(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
 	case key.Matches(msg, m.keys.Down):
 		if m.settingsSel < len(m.feeds)-1 {
 			m.settingsSel++
@@ -819,10 +949,6 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.feeds) > 0 {
 			m.settingsSel = len(m.feeds) - 1
 		}
-		return m, nil
-	case key.Matches(msg, m.keys.Help):
-		m.helpPrev = m.focus
-		m.focus = focusHelp
 		return m, nil
 	case msg.String() == "a":
 		m.settingsMode = smAddName
@@ -851,22 +977,362 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settingsInput.CursorEnd()
 		m.settingsInput.Focus()
 		return m, textinput.Blink
+	case msg.String() == "c":
+		if len(m.feeds) == 0 {
+			return m, nil
+		}
+		m.settingsMode = smCategoryPicker
+		m.settingsCategoryPickerSel = initialCategoryPickerSel(&m)
+		return m, nil
+	case msg.String() == "i":
+		m.settingsMode = smImport
+		m.settingsInput.SetValue("")
+		m.settingsInput.Focus()
+		return m, textinput.Blink
+	case msg.String() == "E":
+		m.settingsMode = smExport
+		m.settingsInput.SetValue("")
+		m.settingsInput.Focus()
+		return m, textinput.Blink
+	}
+	return m, nil
+}
+
+// updateSettingsFolders handles keystrokes in the Folders top-level
+// section. Regular folders are a derived view over feed.Category; this
+// handler operates on uniqueCategories(m.feeds) and uses its own cursor.
+func (m Model) updateSettingsFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	cats := uniqueCategories(m.feeds)
+	switch {
+	case key.Matches(msg, m.keys.Down):
+		if m.settingsFolderSel < len(cats)-1 {
+			m.settingsFolderSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.settingsFolderSel > 0 {
+			m.settingsFolderSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.settingsFolderSel = 0
+		return m, nil
+	case key.Matches(msg, m.keys.Bottom):
+		if len(cats) > 0 {
+			m.settingsFolderSel = len(cats) - 1
+		}
+		return m, nil
+	case msg.String() == "e":
+		if len(cats) == 0 {
+			return m, nil
+		}
+		m.settingsMode = smFolderRename
+		m.settingsInput.SetValue(cats[m.settingsFolderSel])
+		m.settingsInput.CursorEnd()
+		m.settingsInput.Focus()
+		return m, textinput.Blink
+	case msg.String() == "d":
+		if len(cats) == 0 {
+			return m, nil
+		}
+		if err := m.db.DeleteCategory(cats[m.settingsFolderSel]); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.settingsFolderSel = 0
+		return m, loadFeedsCmd(m.db)
+	}
+	return m, nil
+}
+
+// updateSettingsCategoryPicker handles keystrokes while the folder
+// picker (opened by `c` on a feed) is active. Navigation is j/k; enter
+// applies the selected row, or transitions into the smCategory text
+// input when the user picks the "+ New folder…" pseudo-row.
+func (m Model) updateSettingsCategoryPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	rows := buildCategoryPickerRows(&m)
+	switch {
+	case key.Matches(msg, m.keys.Back):
+		m.settingsMode = smList
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.settingsCategoryPickerSel < len(rows)-1 {
+			m.settingsCategoryPickerSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.settingsCategoryPickerSel > 0 {
+			m.settingsCategoryPickerSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.settingsCategoryPickerSel = 0
+		return m, nil
+	case key.Matches(msg, m.keys.Bottom):
+		m.settingsCategoryPickerSel = len(rows) - 1
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		if m.settingsCategoryPickerSel < 0 || m.settingsCategoryPickerSel >= len(rows) {
+			return m, nil
+		}
+		row := rows[m.settingsCategoryPickerSel]
+		if row.IsNew {
+			// Route into the existing smCategory text-input path so
+			// settingsSubmit applies the new value to the feed exactly
+			// the same way as the old direct-prompt flow did.
+			m.settingsMode = smCategory
+			m.settingsInput.SetValue("")
+			m.settingsInput.Focus()
+			return m, textinput.Blink
+		}
+		if len(m.feeds) == 0 || m.settingsSel >= len(m.feeds) {
+			return m, nil
+		}
+		id := m.feeds[m.settingsSel].ID
+		if err := m.db.SetFeedCategory(id, row.Value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.settingsMode = smList
+		return m, loadFeedsCmd(m.db)
+	}
+	return m, nil
+}
+
+// initialCategoryPickerSel places the picker cursor on the row
+// corresponding to the selected feed's current folder. Falls back to
+// the first row ("no folder") if no match is found.
+func initialCategoryPickerSel(m *Model) int {
+	if len(m.feeds) == 0 || m.settingsSel >= len(m.feeds) {
+		return 0
+	}
+	current := m.feeds[m.settingsSel].Category
+	rows := buildCategoryPickerRows(m)
+	for i, r := range rows {
+		if !r.IsNew && r.Value == current {
+			return i
+		}
+	}
+	return 0
+}
+
+// uniqueCategories returns a sorted list of non-empty categories present
+// in the feed list. "Other" (empty string) is excluded because it is the
+// fallback bucket and cannot be meaningfully renamed or deleted.
+func uniqueCategories(feeds []db.Feed) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range feeds {
+		if f.Category == "" || seen[f.Category] {
+			continue
+		}
+		seen[f.Category] = true
+		out = append(out, f.Category)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// categoryCounts returns a map of category → number of feeds.
+// Only non-empty categories are counted.
+func categoryCounts(feeds []db.Feed) map[string]int {
+	out := map[string]int{}
+	for _, f := range feeds {
+		if f.Category == "" {
+			continue
+		}
+		out[f.Category]++
+	}
+	return out
+}
+
+func (m Model) updateSettingsGeneral(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	rows := buildGeneralRows(&m)
+	switch {
+	case key.Matches(msg, m.keys.Down):
+		if m.settingsGeneralSel < len(rows)-1 {
+			m.settingsGeneralSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.settingsGeneralSel > 0 {
+			m.settingsGeneralSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Enter), msg.String() == " ":
+		return m.cycleGeneralRow()
+	}
+	return m, nil
+}
+
+// cycleGeneralRow applies the "next value" action to the currently
+// highlighted row in the General settings list. Each row knows its own
+// cycling logic; persistence to the settings DB happens inline so that
+// the next startup picks up the chosen value.
+func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
+	switch m.settingsGeneralSel {
+	case 0: // Language
+		cur := 0
+		for i, l := range availableLangs {
+			if l == m.lang {
+				cur = i
+				break
+			}
+		}
+		target := availableLangs[(cur+1)%len(availableLangs)]
+		if target == m.lang {
+			return m, nil
+		}
+		m.lang = target
+		m.tr = i18n.For(target)
+		m.keys = defaultKeys(m.tr)
+		_ = m.db.SetLanguage(string(target))
+		return m, m.showToast(m.tr.Toasts.LanguageChanged)
+
+	case 1: // Images
+		m.showImages = !m.showImages
+		_ = m.db.SetShowImages(m.showImages)
+		if m.focus == focusReader && m.readerArt != nil {
+			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
+			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+		}
+		label := m.tr.Status.ImagesOff
+		if m.showImages {
+			label = m.tr.Status.ImagesOn
+		}
+		return m, m.showToast(label)
+
+	case 2: // Sort
+		switch {
+		case m.sortField == "date" && !m.sortReverse:
+			m.sortReverse = true
+		case m.sortField == "date" && m.sortReverse:
+			m.sortField = "title"
+			m.sortReverse = false
+		case m.sortField == "title" && !m.sortReverse:
+			m.sortReverse = true
+		default:
+			m.sortField = "date"
+			m.sortReverse = false
+		}
+		applySort(m.articles, m.sortField, m.sortReverse)
+		_ = m.db.SetSortField(m.sortField)
+		_ = m.db.SetSortReverse(m.sortReverse)
+		return m, m.showToast(sortDisplayName(m.sortField, m.sortReverse, m.tr))
+
+	case 3: // Preview
+		m.showPreview = !m.showPreview
+		_ = m.db.SetShowPreview(m.showPreview)
+		label := m.tr.Status.PreviewOff
+		if m.showPreview {
+			label = m.tr.Status.PreviewOn
+		}
+		return m, m.showToast(label)
+
+	case 4: // Theme
+		cur := 0
+		for i, t := range availableThemes {
+			if t.Name == m.themeName {
+				cur = i
+				break
+			}
+		}
+		next := availableThemes[(cur+1)%len(availableThemes)]
+		m.themeName = next.Name
+		applyTheme(next)
+		applyHelpModelStyles(&m.help)
+		m.settingsInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+		m.searchInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+		m.commandInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+		if m.db != nil {
+			_ = m.db.SetTheme(next.Name)
+		}
+		return m, m.showToast(fmt.Sprintf(m.tr.Toasts.ThemeChangedFmt, next.Name))
+	}
+	return m, nil
+}
+
+// applyHelpModelStyles copies the current palette into the bubbles
+// help.Model so its short/full help bars match the active theme. The
+// bubbles model caches Styles, so we rewrite them whenever the theme
+// swaps at runtime.
+func applyHelpModelStyles(h *help.Model) {
+	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+	h.Styles.ShortDesc = lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
+	h.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
+	h.Styles.FullKey = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+	h.Styles.FullDesc = lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
+	h.Styles.FullSeparator = lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
+}
+
+// updateSettingsFolders handles keystrokes while the Folders section of
+// the Settings screen is active. Mirrors updateSettingsFeeds: j/k to
+// move cursor, a/d/e for CRUD. Delete applies immediately; add and edit
+// route through settingsSubmit with a two-step prompt (name → query).
+func (m Model) updateSettingsSmartFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Down):
+		if m.settingsSmartFolderSel < len(m.smartFolders)-1 {
+			m.settingsSmartFolderSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.settingsSmartFolderSel > 0 {
+			m.settingsSmartFolderSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.settingsSmartFolderSel = 0
+		return m, nil
+	case key.Matches(msg, m.keys.Bottom):
+		if len(m.smartFolders) > 0 {
+			m.settingsSmartFolderSel = len(m.smartFolders) - 1
+		}
+		return m, nil
+	case msg.String() == "a":
+		m.settingsMode = smSmartFolderAddName
+		m.settingsInput.SetValue("")
+		m.settingsInput.Focus()
+		return m, textinput.Blink
+	case msg.String() == "d":
+		if len(m.smartFolders) == 0 {
+			return m, nil
+		}
+		id := m.smartFolders[m.settingsSmartFolderSel].ID
+		if err := m.db.DeleteSmartFolder(id); err != nil {
+			m.err = err
+			return m, nil
+		}
+		return m, loadSmartFoldersCmd(m.db)
+	case msg.String() == "e":
+		if len(m.smartFolders) == 0 {
+			return m, nil
+		}
+		m.settingsMode = smSmartFolderEditName
+		m.settingsInput.SetValue(m.smartFolders[m.settingsSmartFolderSel].Name)
+		m.settingsInput.CursorEnd()
+		m.settingsInput.Focus()
+		return m, textinput.Blink
 	}
 	return m, nil
 }
 
 func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 	value := strings.TrimSpace(m.settingsInput.Value())
-	if value == "" {
-		return m, nil
-	}
 	switch m.settingsMode {
 	case smAddName:
+		if value == "" {
+			return m, nil
+		}
 		m.pendingName = value
 		m.settingsMode = smAddURL
 		m.settingsInput.SetValue("")
 		return m, textinput.Blink
 	case smAddURL:
+		if value == "" {
+			return m, nil
+		}
 		if _, err := m.db.UpsertFeed(m.pendingName, value, ""); err != nil {
 			m.err = err
 			return m, nil
@@ -877,7 +1343,7 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsInput.SetValue("")
 		return m, loadFeedsCmd(m.db)
 	case smRename:
-		if len(m.feeds) == 0 {
+		if value == "" || len(m.feeds) == 0 {
 			return m, nil
 		}
 		id := m.feeds[m.settingsSel].ID
@@ -888,6 +1354,131 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsMode = smList
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
+		return m, loadFeedsCmd(m.db)
+	case smCategory:
+		if len(m.feeds) == 0 {
+			return m, nil
+		}
+		id := m.feeds[m.settingsSel].ID
+		if err := m.db.SetFeedCategory(id, value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, loadFeedsCmd(m.db)
+	case smImport:
+		if value == "" {
+			return m, nil
+		}
+		path := expandPath(value)
+		n, err := importOPMLFile(m.db, path)
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.fetching = true
+		m.status = m.tr.Status.Fetching
+		return m, tea.Batch(
+			loadFeedsCmd(m.db),
+			fetchAllCmd(m.fetcher),
+			m.showToast(fmt.Sprintf(m.tr.Status.ImportedFmt, n)),
+			m.spin.Tick,
+		)
+	case smExport:
+		if value == "" {
+			return m, nil
+		}
+		path := expandPath(value)
+		n, err := exportOPMLFile(m.db, path)
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+		return m, m.showToast(fmt.Sprintf(m.tr.Status.ExportedFmt, n, path))
+
+	case smSmartFolderAddName:
+		if value == "" {
+			return m, nil
+		}
+		m.pendingName = value
+		m.settingsMode = smSmartFolderAddQuery
+		m.settingsInput.SetValue("")
+		return m, textinput.Blink
+
+	case smSmartFolderAddQuery:
+		if value == "" {
+			return m, nil
+		}
+		if _, err := ParseQuery(value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		if _, err := m.db.InsertSmartFolder(m.pendingName, value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.pendingName = ""
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, loadSmartFoldersCmd(m.db)
+
+	case smSmartFolderEditName:
+		if value == "" {
+			return m, nil
+		}
+		m.pendingName = value
+		m.settingsMode = smSmartFolderEditQuery
+		m.settingsInput.SetValue(m.smartFolders[m.settingsFolderSel].Query)
+		m.settingsInput.CursorEnd()
+		return m, textinput.Blink
+
+	case smSmartFolderEditQuery:
+		if value == "" {
+			return m, nil
+		}
+		if _, err := ParseQuery(value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		if m.settingsFolderSel >= len(m.smartFolders) {
+			return m, nil
+		}
+		id := m.smartFolders[m.settingsFolderSel].ID
+		if err := m.db.UpdateSmartFolder(id, m.pendingName, value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.pendingName = ""
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, loadSmartFoldersCmd(m.db)
+
+	case smFolderRename:
+		cats := uniqueCategories(m.feeds)
+		if m.settingsFolderSel >= len(cats) {
+			return m, nil
+		}
+		old := cats[m.settingsFolderSel]
+		// Empty new value is valid — moves feeds into Other.
+		if err := m.db.RenameCategory(old, value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		// Reset cursor: row may have disappeared (empty rename) or moved.
+		m.settingsFolderSel = 0
 		return m, loadFeedsCmd(m.db)
 	}
 	return m, nil
@@ -900,7 +1491,8 @@ func (m Model) openReader() (tea.Model, tea.Cmd) {
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
 	feedName := readerFeedName(m.feeds, a.FeedID)
-	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4, m.showImages))
+	feedURL := readerFeedURL(m.feeds, a.FeedID)
+	m.reader.SetContent(buildReaderContent(a, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
 	m.reader.GotoTop()
 	if a.ReadAt == nil {
 		return m, markReadCmd(m.db, a.ID)
@@ -924,7 +1516,7 @@ func (m Model) readerJump(dir int) (tea.Model, tea.Cmd) {
 			target = len(m.articles) - 1
 		}
 		if target == m.selArt {
-			m.status = "end of list"
+			m.status = m.tr.Status.EndOfList
 			return m, nil
 		}
 	}
@@ -932,7 +1524,8 @@ func (m Model) readerJump(dir int) (tea.Model, tea.Cmd) {
 	a := m.articles[target]
 	m.readerArt = &a
 	feedName := readerFeedName(m.feeds, a.FeedID)
-	m.reader.SetContent(buildReaderContent(a, feedName, m.reader.Width-4, m.showImages))
+	feedURL := readerFeedURL(m.feeds, a.FeedID)
+	m.reader.SetContent(buildReaderContent(a, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
 	m.reader.GotoTop()
 	if a.ReadAt == nil {
 		return m, markReadCmd(m.db, a.ID)
@@ -1042,10 +1635,10 @@ func clamp(v, lo, hi int) int {
 
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
-		return "rdr — " + m.status
+		return fmt.Sprintf(m.tr.Status.TinyPrefix, m.status)
 	}
 	if m.width < 40 || m.height < 10 {
-		return "rdr: terminal too small"
+		return m.tr.Status.TooSmall
 	}
 
 	helpView := m.helpView()
@@ -1053,45 +1646,31 @@ func (m Model) View() string {
 
 	if m.focus == focusSettings {
 		body := renderSettings(
-			m.feeds,
-			m.settingsSel,
-			m.settingsMode,
+			&m,
 			m.settingsInput.View(),
 			m.width,
 			m.height-1-helpH,
 		)
-		statusText := "rdr · settings"
-		if m.err != nil {
-			statusText += "  " + errStyle.Render("! "+m.err.Error())
-		}
-		status := statusBar.Width(m.width).Render(statusText)
+		status := renderPowerline([]segment{appSegment(), {Text: m.tr.Status.SettingsCrumb, FG: colorText, BG: colorAltBG}}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
 	if m.focus == focusSearch {
 		body := renderSearch(m, m.width, m.height-1-helpH)
-		statusText := "rdr · search"
-		if m.err != nil {
-			statusText += "  " + errStyle.Render("! "+m.err.Error())
-		}
-		status := statusBar.Width(m.width).Render(statusText)
+		status := renderPowerline([]segment{appSegment(), {Text: m.tr.Status.SearchCrumb, FG: colorText, BG: colorAltBG}}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
 	if m.focus == focusLinks {
 		body := renderLinkPicker(m, m.width, m.height-1-helpH)
-		statusText := "rdr · links"
-		if m.err != nil {
-			statusText += "  " + errStyle.Render("! "+m.err.Error())
-		}
-		status := statusBar.Width(m.width).Render(statusText)
+		status := renderPowerline([]segment{appSegment(), {Text: m.tr.Status.LinksCrumb, FG: colorText, BG: colorAltBG}}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
 	if m.focus == focusHelp {
 		body := renderHelpScreen(m, m.width, m.height-1-helpH)
-		statusText := "rdr · help · " + focusLabel(m.helpPrev)
-		status := statusBar.Width(m.width).Render(statusText)
+		label := fmt.Sprintf(m.tr.Status.HelpCrumbFmt, focusLabel(m.helpPrev, m.tr))
+		status := renderPowerline([]segment{appSegment(), {Text: label, FG: colorText, BG: colorAltBG}}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
@@ -1099,26 +1678,25 @@ func (m Model) View() string {
 		// Breadcrumb: "FeedName / Truncated title" replaces the flat
 		// "rdr · reader" so you always know what you're looking at.
 		feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
-		titleBudget := m.width - lipgloss.Width(feedName) - 12
+		titleBudget := m.width - lipgloss.Width(feedName) - 20
 		if titleBudget < 10 {
 			titleBudget = 10
 		}
-		crumb := readerSource.Render(feedName) +
-			readerMetaMuted.Render(" / ") +
-			truncate(m.readerArt.Title, titleBudget)
-		statusText := crumb
-		// Busy indicator replaces the breadcrumb so users see
-		// something is happening when f / batch ops are running.
-		if m.fetching {
-			statusText = m.spin.View() + " " + m.status
-		}
+		var status string
 		if m.toast != "" {
-			statusText = toastStyle.Render(" " + m.toast + " ")
+			toastSeg := segment{Text: m.toast, FG: colorAccent, BG: colorAltBG, Bold: true}
+			status = renderPowerline([]segment{appSegment(), toastSeg}, m.width)
+		} else if m.fetching {
+			status = renderPowerline([]segment{
+				appSegment(),
+				{Text: m.spin.View() + " " + m.status, FG: colorText, BG: colorAltBG},
+			}, m.width)
+		} else {
+			status = renderPowerline(readerSegments(feedName, m.readerArt.Title, titleBudget), m.width)
 		}
 		if m.err != nil {
-			statusText += "  " + errStyle.Render("! "+m.err.Error())
+			status = paintLineBG(status+"  "+errStyle.Render("! "+m.err.Error()), m.width)
 		}
-		status := statusBar.Width(m.width).Render(statusText)
 		body := paneActive.Width(m.width - 2).Height(m.height - 2 - helpH).Render(m.reader.View())
 		frame := lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 		return frame
@@ -1135,7 +1713,7 @@ func (m Model) View() string {
 		}
 	}
 
-	paneH := m.height - 2 - helpH - popupH
+	paneH := m.height - 4 - helpH - popupH
 
 	var row string
 	if m.zenMode {
@@ -1145,10 +1723,18 @@ func (m Model) View() string {
 			fullW = 10
 		}
 		entries := m.entries()
+		visualLo, visualHi := -1, -1
+		articlePreview := m.showPreview
+		if m.visualMode {
+			visualLo, visualHi = m.visualRange()
+			// Hide the preview popup while multi-selecting — it would
+			// cover range rows and looks noisy.
+			articlePreview = false
+		}
 		if m.focus == focusFeeds {
-			row = renderFeedList(entries, m.selEntry, true, fullW, paneH)
+			row = renderFeedList(entries, m.selEntry, true, fullW, paneH, m.tr)
 		} else {
-			row = renderArticleList(m.articles, m.selArt, true, fullW, paneH)
+			row = renderArticleList(m.articles, m.selArt, true, fullW, paneH, m.tr, articlePreview, visualLo, visualHi)
 		}
 	} else {
 		leftW := m.width/3 - 2
@@ -1160,44 +1746,48 @@ func (m Model) View() string {
 			rightW = 10
 		}
 		entries := m.entries()
-		left := renderFeedList(entries, m.selEntry, m.focus == focusFeeds, leftW, paneH)
-		right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH)
+		visualLo, visualHi := -1, -1
+		articlePreview := m.showPreview
+		if m.visualMode {
+			visualLo, visualHi = m.visualRange()
+			articlePreview = false
+		}
+		left := renderFeedList(entries, m.selEntry, m.focus == focusFeeds, leftW, paneH, m.tr)
+		right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH, m.tr, articlePreview, visualLo, visualHi)
 		row = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	}
 
 	if m.focus == focusCommand {
-		cmdLine := statusBar.Width(m.width).Render(m.commandInput.View())
+		cmdLine := renderPowerline([]segment{
+			appSegment(),
+			{Text: m.commandInput.View(), FG: colorText, BG: colorAltBG},
+		}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, row, popup, cmdLine, helpView)
 	}
 
-	var statusText string
+	var status string
 	if m.toast != "" {
-		// Toast replaces the normal status line for its ~2s lifetime.
-		statusText = toastStyle.Render(" " + m.toast + " ")
+		toastSeg := segment{Text: m.toast, FG: colorAccent, BG: colorAltBG, Bold: true}
+		status = renderPowerline([]segment{appSegment(), toastSeg}, m.width)
 	} else {
-		statusText = "rdr · " + m.status
+		statusLabel := m.status
 		if m.fetching {
-			statusText = "rdr · " + m.spin.View() + " " + m.status
+			statusLabel = m.spin.View() + " " + m.status
 		}
-		statusText += "  " + searchCount.Render("["+filterLabel(m.filter)+"]")
-		if m.sortField != "date" || m.sortReverse {
-			dir := "↓"
-			if m.sortReverse {
-				dir = "↑"
-			}
-			statusText += " " + searchCount.Render("[sort:"+m.sortField+dir+"]")
-		}
-		if m.zenMode {
-			statusText += " " + searchCount.Render("[zen]")
-		}
+		segs := statusSegments(statusLabel, filterLabel(m.filter, m.tr),
+			m.sortField, m.sortReverse, m.zenMode)
 		if m.countPrefix > 0 {
-			statusText += " " + searchCount.Render(fmt.Sprintf("[count:%d]", m.countPrefix))
+			segs = append(segs, segment{
+				Text: fmt.Sprintf("%d…", m.countPrefix),
+				FG:   colorText,
+				BG:   colorBorder,
+			})
 		}
+		status = renderPowerline(segs, m.width)
 	}
 	if m.err != nil {
-		statusText += "  " + errStyle.Render("! "+m.err.Error())
+		status = paintLineBG(status+"  "+errStyle.Render("! "+m.err.Error()), m.width)
 	}
-	status := statusBar.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Top, row, status, helpView)
 }
@@ -1266,8 +1856,9 @@ func (m Model) toggleCategoryFold() (tea.Model, tea.Cmd) {
 func (m Model) categoryKeyFromEntry(e feedEntry) string {
 	if e.Kind != entryCategory || len(e.CategoryFeedIDs) == 0 {
 		// Best-effort fallback: the header name is the key except when
-		// it's "Other" which maps to "".
-		if e.Name == "Other" {
+		// it's the localized "Other" label which maps to the empty
+		// category bucket.
+		if e.Name == m.tr.Feeds.OtherCategory {
 			return ""
 		}
 		return e.Name
@@ -1281,10 +1872,145 @@ func (m Model) categoryKeyFromEntry(e feedEntry) string {
 	return ""
 }
 
+// visualRange returns the (lo, hi) pair of article indices currently
+// covered by the visual selection. Always normalized so lo <= hi.
+func (m Model) visualRange() (lo, hi int) {
+	lo, hi = m.visualAnchor, m.selArt
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	if lo < 0 {
+		lo = 0
+	}
+	if hi >= len(m.articles) {
+		hi = len(m.articles) - 1
+	}
+	return
+}
+
+// visualIDs returns the article IDs inside the current visual range.
+func (m Model) visualIDs() []int64 {
+	lo, hi := m.visualRange()
+	if lo > hi {
+		return nil
+	}
+	out := make([]int64, 0, hi-lo+1)
+	for i := lo; i <= hi; i++ {
+		out = append(out, m.articles[i].ID)
+	}
+	return out
+}
+
+// applyReadOnVisual marks every article in the current visual range as
+// read. Exits visual mode on completion.
+func (m Model) applyReadOnVisual() (tea.Model, tea.Cmd) {
+	ids := m.visualIDs()
+	if len(ids) == 0 {
+		m.visualMode = false
+		return m, nil
+	}
+	m.visualMode = false
+	m.visualAnchor = 0
+	return m, tea.Batch(
+		bulkMarkReadCmd(m.db, ids),
+		m.showToast(fmt.Sprintf(m.tr.Toasts.MarkedReadFmt, len(ids))),
+	)
+}
+
+// applyStarOnVisual toggles starred on every article in the current
+// visual range. Direction is decided by the anchor's current state:
+// if the anchor is NOT starred, star all; otherwise unstar all.
+func (m Model) applyStarOnVisual() (tea.Model, tea.Cmd) {
+	ids := m.visualIDs()
+	if len(ids) == 0 || m.visualAnchor >= len(m.articles) {
+		m.visualMode = false
+		return m, nil
+	}
+	star := m.articles[m.visualAnchor].StarredAt == nil
+	m.visualMode = false
+	m.visualAnchor = 0
+	label := m.tr.Toasts.Starred
+	if !star {
+		label = m.tr.Toasts.Unstarred
+	}
+	return m, tea.Batch(
+		bulkSetStarredCmd(m.db, ids, star),
+		m.showToast(label),
+	)
+}
+
+// yankVisual copies URLs (or markdown-formatted links) for every
+// article in the current visual range to the clipboard via OSC 52.
+func (m Model) yankVisual(markdown bool) (tea.Model, tea.Cmd) {
+	lo, hi := m.visualRange()
+	if lo > hi {
+		m.visualMode = false
+		return m, nil
+	}
+	var lines []string
+	for i := lo; i <= hi; i++ {
+		a := m.articles[i]
+		if a.URL == "" {
+			continue
+		}
+		if markdown {
+			title := a.Title
+			if title == "" {
+				title = a.URL
+			}
+			lines = append(lines, fmt.Sprintf("[%s](%s)", title, a.URL))
+		} else {
+			lines = append(lines, a.URL)
+		}
+	}
+	m.visualMode = false
+	m.visualAnchor = 0
+	if len(lines) == 0 {
+		m.err = fmt.Errorf("%s", m.tr.Errors.NoURLToCopy)
+		return m, nil
+	}
+	osc52Copy(strings.Join(lines, "\n"))
+	label := m.tr.Toasts.URLCopied
+	if markdown {
+		label = m.tr.Toasts.MarkdownCopied
+	}
+	return m, m.showToast(label)
+}
+
+// bulkMarkReadCmd runs BulkMarkRead in a goroutine and emits a message
+// that triggers a list refresh, mirroring the single-article path.
+func bulkMarkReadCmd(d *db.DB, ids []int64) tea.Cmd {
+	return func() tea.Msg {
+		if err := d.BulkMarkRead(ids); err != nil {
+			return errMsg{err}
+		}
+		return batchAppliedMsg{action: "read", count: len(ids)}
+	}
+}
+
+// bulkSetStarredCmd runs BulkSetStarred in a goroutine. action is
+// "star" or "unstar" so the shared batchAppliedMsg handler surfaces a
+// meaningful toast label.
+func bulkSetStarredCmd(d *db.DB, ids []int64, starred bool) tea.Cmd {
+	return func() tea.Msg {
+		if err := d.BulkSetStarred(ids, starred); err != nil {
+			return errMsg{err}
+		}
+		action := "star"
+		if !starred {
+			action = "unstar"
+		}
+		return batchAppliedMsg{action: action, count: len(ids)}
+	}
+}
+
 // yankCurrent copies the selected article's URL to the system clipboard
 // via OSC 52. If markdown is true, it copies a `[title](url)` link
 // instead. Works from the articles list or the reader.
 func (m Model) yankCurrent(markdown bool) (tea.Model, tea.Cmd) {
+	if m.visualMode && m.focus == focusArticles {
+		return m.yankVisual(markdown)
+	}
 	var title, url string
 	switch {
 	case m.focus == focusReader && m.readerArt != nil:
@@ -1298,14 +2024,14 @@ func (m Model) yankCurrent(markdown bool) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if url == "" {
-		m.err = fmt.Errorf("no URL to copy")
+		m.err = fmt.Errorf("%s", m.tr.Errors.NoURLToCopy)
 		return m, nil
 	}
 	text := url
-	label := "URL copied"
+	label := m.tr.Toasts.URLCopied
 	if markdown {
 		text = fmt.Sprintf("[%s](%s)", title, url)
-		label = "markdown copied"
+		label = m.tr.Toasts.MarkdownCopied
 	}
 	osc52Copy(text)
 	return m, m.showToast(label)
@@ -1314,6 +2040,9 @@ func (m Model) yankCurrent(markdown bool) (tea.Model, tea.Cmd) {
 // toggleReadOnCurrent flips the read state of the article under the cursor
 // (articles list) or the one being read (reader focus). No-op otherwise.
 func (m Model) toggleReadOnCurrent() (tea.Model, tea.Cmd) {
+	if m.visualMode && m.focus == focusArticles {
+		return m.applyReadOnVisual()
+	}
 	var (
 		id       int64
 		makeRead bool
@@ -1406,7 +2135,7 @@ func (m Model) switchFilter(target articleFilter) (tea.Model, tea.Cmd) {
 	}
 	m.filter = target
 	m.selArt = 0
-	label := "showing " + filterLabel(target)
+	label := fmt.Sprintf(m.tr.Toasts.ShowingFmt, filterLabel(target, m.tr))
 	cmds := []tea.Cmd{m.showToast(label)}
 	if len(m.feeds) > 0 {
 		if c := m.loadCurrentCmd(); c != nil {
@@ -1419,6 +2148,9 @@ func (m Model) switchFilter(target articleFilter) (tea.Model, tea.Cmd) {
 // toggleStarOnCurrent toggles the starred flag for the article under the
 // cursor (in articles list) or the one being read (in reader focus).
 func (m Model) toggleStarOnCurrent() (tea.Model, tea.Cmd) {
+	if m.visualMode && m.focus == focusArticles {
+		return m.applyStarOnVisual()
+	}
 	var id int64
 	switch {
 	case m.focus == focusReader && m.readerArt != nil:
@@ -1450,7 +2182,7 @@ func (m Model) jumpToNextUnread() (tea.Model, tea.Cmd) {
 		if m.articles[i].ReadAt == nil {
 			m.selArt = i
 			m.focus = focusArticles
-			m.status = "next unread"
+			m.status = m.tr.Status.NextUnread
 			return m, nil
 		}
 	}
@@ -1458,7 +2190,7 @@ func (m Model) jumpToNextUnread() (tea.Model, tea.Cmd) {
 	// skip folder rows — "next unread" is a per-feed concept.
 	entries := m.entries()
 	if len(entries) == 0 {
-		m.status = "no unread"
+		m.status = m.tr.Status.NoUnread
 		return m, nil
 	}
 	for off := 1; off <= len(entries); off++ {
@@ -1471,11 +2203,11 @@ func (m Model) jumpToNextUnread() (tea.Model, tea.Cmd) {
 			m.selEntry = i
 			m.selArt = 0
 			m.focus = focusArticles
-			m.status = "next feed: " + e.Name
+			m.status = fmt.Sprintf(m.tr.Status.NextFeedFmt, e.Name)
 			return m, loadArticlesCmd(m.db, e.FeedID, m.filter)
 		}
 	}
-	m.status = "no unread"
+	m.status = m.tr.Status.NoUnread
 	return m, nil
 }
 
@@ -1524,7 +2256,7 @@ func (m Model) entries() []feedEntry {
 		g := groups[key]
 		displayName := key
 		if displayName == "" {
-			displayName = "Other"
+			displayName = m.tr.Feeds.OtherCategory
 		}
 		ids := make([]int64, 0, len(g.feeds))
 		unreadTotal := 0
@@ -1549,6 +2281,7 @@ func (m Model) entries() []feedEntry {
 				Kind:        entryFeed,
 				Name:        f.Name,
 				FeedID:      f.ID,
+				FeedURL:     f.URL,
 				UnreadCount: f.UnreadCount,
 				HasError:    hasErr,
 			})
@@ -1625,9 +2358,8 @@ func (m Model) loadCurrentCmd() tea.Cmd {
 }
 
 func (m Model) helpView() string {
-	// Context-aware single-row short help. The full-screen help is a
-	// separate focus state (focusHelp) and does not replace this.
-	return m.help.ShortHelpView(shortHelpFor(m.focus, m.keys))
+	raw := m.help.ShortHelpView(shortHelpFor(m.focus, m.keys))
+	return paintLineBG("  "+raw, m.width)
 }
 
 func loadFeedsCmd(d *db.DB) tea.Cmd {
@@ -1670,6 +2402,19 @@ func loadCategoryArticlesCmd(d *db.DB, name string, feedIDs []int64) tea.Cmd {
 			}
 		}
 		return categoryArticlesLoadedMsg{name: name, articles: out}
+	}
+}
+
+// loadSmartFoldersCmd fetches the smart folder list from the DB. Used
+// after CRUD operations in the Folders settings section to refresh the
+// in-memory slice and the counter cache.
+func loadSmartFoldersCmd(d *db.DB) tea.Cmd {
+	return func() tea.Msg {
+		folders, err := d.ListSmartFolders()
+		if err != nil {
+			return errMsg{err}
+		}
+		return smartFoldersLoadedMsg{folders: folders}
 	}
 }
 

@@ -12,32 +12,54 @@ import (
 )
 
 var (
+	searchTitle        lipgloss.Style
+	searchHint         lipgloss.Style
+	searchCount        lipgloss.Style
+	searchFeedTag      lipgloss.Style
+	searchPreviewTitle lipgloss.Style
+	searchPreviewMeta  lipgloss.Style
+	searchPreviewBody  lipgloss.Style
+	searchPreviewURL   lipgloss.Style
+)
+
+func init() {
+	rebuildSearchStyles()
+	registerStyleRebuild(rebuildSearchStyles)
+}
+
+func rebuildSearchStyles() {
 	searchTitle = lipgloss.NewStyle().
-			Foreground(colorAccent).
-			Bold(true).
-			Padding(0, 0, 1, 0)
+		Foreground(colorAccent).
+		Background(colorBG).
+		Bold(true).
+		Padding(0, 0, 1, 0)
 
 	searchHint = lipgloss.NewStyle().
-			Foreground(colorMuted).
-			Italic(true)
+		Foreground(colorMuted).
+		Background(colorBG).
+		Italic(true)
 
 	searchCount = lipgloss.NewStyle().
-			Foreground(colorMuted)
+		Foreground(colorMuted).
+		Background(colorBG)
 
 	searchFeedTag = lipgloss.NewStyle().
-			Foreground(colorGreen)
+		Foreground(colorGreen).
+		Background(colorBG)
 
 	searchPreviewTitle = lipgloss.NewStyle().
-				Foreground(colorAccent).
-				Bold(true)
+		Foreground(colorAccent).
+		Background(colorBG).
+		Bold(true)
 
 	searchPreviewMeta = lipgloss.NewStyle().
-				Foreground(colorMuted)
+		Foreground(colorMuted).
+		Background(colorBG)
 
-	searchPreviewBody = lipgloss.NewStyle().Foreground(colorText)
+	searchPreviewBody = lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
 
-	searchPreviewURL = lipgloss.NewStyle().Foreground(colorTeal).Underline(true)
-)
+	searchPreviewURL = lipgloss.NewStyle().Foreground(colorTeal).Background(colorBG).Underline(true)
+}
 
 func recomputeMatches(m *Model) {
 	q := strings.TrimSpace(m.searchInput.Value())
@@ -207,7 +229,7 @@ func (m Model) openSearchSelection() (tea.Model, tea.Cmd) {
 	m.focus = focusReader
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
-	m.reader.SetContent(buildReaderContent(art, item.FeedName, m.reader.Width-4, m.showImages))
+	m.reader.SetContent(buildReaderContent(art, item.FeedName, "", m.reader.Width-4, m.showImages, m.tr))
 	m.reader.GotoTop()
 
 	m.searchInput.Blur()
@@ -258,7 +280,7 @@ func renderSearchLeft(m Model, width, height int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(searchTitle.Render("Search"))
+	b.WriteString(searchTitle.Render(m.tr.Search.Title))
 	b.WriteString("\n")
 	b.WriteString(m.searchInput.View())
 	b.WriteString("\n\n")
@@ -270,11 +292,11 @@ func renderSearchLeft(m Model, width, height int) string {
 
 	switch {
 	case len(m.searchAll) == 0:
-		b.WriteString(readStyle.Render("(no articles)"))
+		b.WriteString(readStyle.Render(m.tr.Search.NoArticles))
 		// Pad the remaining list rows so count stays at bottom.
 		b.WriteString(strings.Repeat("\n", listRows-1))
 	case len(m.searchMatches) == 0:
-		b.WriteString(readStyle.Render("(no matches)"))
+		b.WriteString(readStyle.Render(m.tr.Search.NoMatches))
 		b.WriteString(strings.Repeat("\n", listRows-1))
 	default:
 		start := m.searchScroll
@@ -299,7 +321,7 @@ func renderSearchLeft(m Model, width, height int) string {
 			}
 			feedTag := searchFeedTag.Render(truncate(item.FeedName, 12))
 			title := style.Render(prefix + truncate(item.Title, titleW))
-			when := timeAgoStyle.Render(timeAgo(item.PublishedAt))
+			when := timeAgoStyle.Render(timeAgo(item.PublishedAt, m.tr))
 			leftCol := lipgloss.NewStyle().Width(width - 16).Render(title + "  " + feedTag)
 			line := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, when)
 			b.WriteString(line)
@@ -316,10 +338,11 @@ func renderSearchLeft(m Model, width, height int) string {
 	if m.searchErr != nil {
 		b.WriteString(errStyle.Render("! " + m.searchErr.Error()))
 	} else {
-		b.WriteString(searchCount.Render(fmt.Sprintf("%d/%d results", len(m.searchMatches), len(m.searchAll))))
+		b.WriteString(searchCount.Render(fmt.Sprintf(m.tr.Search.ResultsFmt, len(m.searchMatches), len(m.searchAll))))
 	}
 
-	return paneActive.Width(width - 2).Height(innerH).Render(b.String())
+	c := fillBackground(b.String(), width-4)
+	return paneActive.Width(width - 2).Height(innerH).Render(c)
 }
 
 func renderSearchPreview(m Model, width, height int) string {
@@ -341,14 +364,15 @@ func renderSearchPreview(m Model, width, height int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(searchTitle.Render("Preview"))
+	b.WriteString(searchTitle.Render(m.tr.Search.PreviewTitle))
 	b.WriteString("\n")
 
 	hasSelection := len(m.searchMatches) > 0 && m.searchSel >= 0 && m.searchSel < len(m.searchMatches)
 	if !hasSelection {
-		b.WriteString(searchHint.Render("(no selection)"))
+		b.WriteString(searchHint.Render(m.tr.Search.NoSelection))
 		b.WriteString(strings.Repeat("\n", innerH-3))
-		return paneInactive.Width(width - 2).Height(innerH).Render(b.String())
+		c := fillBackground(b.String(), width-4)
+		return paneInactive.Width(width - 2).Height(innerH).Render(c)
 	}
 
 	item := m.searchAll[m.searchMatches[m.searchSel]]
@@ -360,7 +384,7 @@ func renderSearchPreview(m Model, width, height int) string {
 	b.WriteString(searchPreviewTitle.Render(truncate(item.Title, innerW)))
 	b.WriteString("\n")
 	meta := []string{searchFeedTag.Render(item.FeedName)}
-	if ago := timeAgo(item.PublishedAt); ago != "" {
+	if ago := timeAgo(item.PublishedAt, m.tr); ago != "" {
 		meta = append(meta, searchPreviewMeta.Render(ago))
 	}
 	if item.URL != "" {
@@ -382,7 +406,7 @@ func renderSearchPreview(m Model, width, height int) string {
 	case item.Description != "":
 		body = searchPreviewBody.Render(wrap(stripHTML(item.Description), innerW))
 	default:
-		body = searchHint.Render("(no preview — press enter, then f to load full)")
+		body = searchHint.Render(m.tr.Search.NoPreviewHint)
 	}
 
 	// Clip AND pad body to exact bodyRows so the pane never changes height.
@@ -395,6 +419,7 @@ func renderSearchPreview(m Model, width, height int) string {
 	}
 	b.WriteString(strings.Join(lines, "\n"))
 
-	return paneInactive.Width(width - 2).Height(innerH).Render(b.String())
+	c := fillBackground(b.String(), width-4)
+	return paneInactive.Width(width - 2).Height(innerH).Render(c)
 }
 

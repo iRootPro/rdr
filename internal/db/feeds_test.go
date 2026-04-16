@@ -122,6 +122,54 @@ func TestRenameFeed_ChangesNameKeepsURL(t *testing.T) {
 	}
 }
 
+func TestRenameCategory_BulkUpdate(t *testing.T) {
+	d := openTestDB(t)
+	a, _ := d.UpsertFeed("A", "https://a.example/rss", "Tech")
+	b, _ := d.UpsertFeed("B", "https://b.example/rss", "Tech")
+	c, _ := d.UpsertFeed("C", "https://c.example/rss", "News")
+
+	if err := d.RenameCategory("Tech", "Technology"); err != nil {
+		t.Fatalf("RenameCategory: %v", err)
+	}
+
+	feeds, _ := d.ListFeeds()
+	byID := map[int64]Feed{}
+	for _, f := range feeds {
+		byID[f.ID] = f
+	}
+	if byID[a.ID].Category != "Technology" {
+		t.Fatalf("a.Category: %q", byID[a.ID].Category)
+	}
+	if byID[b.ID].Category != "Technology" {
+		t.Fatalf("b.Category: %q", byID[b.ID].Category)
+	}
+	if byID[c.ID].Category != "News" {
+		t.Fatalf("c.Category untouched expected, got %q", byID[c.ID].Category)
+	}
+}
+
+func TestDeleteCategory_MovesToOther(t *testing.T) {
+	d := openTestDB(t)
+	a, _ := d.UpsertFeed("A", "https://a.example/rss", "Tech")
+	b, _ := d.UpsertFeed("B", "https://b.example/rss", "News")
+
+	if err := d.DeleteCategory("Tech"); err != nil {
+		t.Fatalf("DeleteCategory: %v", err)
+	}
+
+	feeds, _ := d.ListFeeds()
+	byID := map[int64]Feed{}
+	for _, f := range feeds {
+		byID[f.ID] = f
+	}
+	if byID[a.ID].Category != "" {
+		t.Fatalf("a.Category should be empty, got %q", byID[a.ID].Category)
+	}
+	if byID[b.ID].Category != "News" {
+		t.Fatalf("b.Category untouched expected, got %q", byID[b.ID].Category)
+	}
+}
+
 func mustExec(t *testing.T, d *DB, query string, args ...any) {
 	t.Helper()
 	if _, err := d.sql.Exec(query, args...); err != nil {

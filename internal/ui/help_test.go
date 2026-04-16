@@ -5,7 +5,14 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/key"
+
+	"github.com/iRootPro/rdr/internal/i18n"
 )
+
+// testTR is the English string table used by tests that don't otherwise
+// construct a full Model. Kept as a package-level var so every test can
+// reuse the same pointer.
+var testTR = i18n.For(i18n.EN)
 
 func keysContain(bindings []key.Binding, wantKey string) bool {
 	for _, b := range bindings {
@@ -19,7 +26,7 @@ func keysContain(bindings []key.Binding, wantKey string) bool {
 }
 
 func TestShortHelpFor_FeedsHasTabAndSearch(t *testing.T) {
-	k := defaultKeys()
+	k := defaultKeys(testTR)
 	got := shortHelpFor(focusFeeds, k)
 	if !keysContain(got, "tab") {
 		t.Fatal("focusFeeds should include tab (switch pane)")
@@ -36,7 +43,7 @@ func TestShortHelpFor_FeedsHasTabAndSearch(t *testing.T) {
 }
 
 func TestShortHelpFor_ReaderHasJumpAndFull(t *testing.T) {
-	k := defaultKeys()
+	k := defaultKeys(testTR)
 	got := shortHelpFor(focusReader, k)
 	if !keysContain(got, "J") || !keysContain(got, "K") {
 		t.Fatal("focusReader should include J/K (next/prev article)")
@@ -53,7 +60,7 @@ func TestShortHelpFor_ReaderHasJumpAndFull(t *testing.T) {
 }
 
 func TestShortHelpFor_CommandContextual(t *testing.T) {
-	k := defaultKeys()
+	k := defaultKeys(testTR)
 	got := shortHelpFor(focusCommand, k)
 	if !keysContain(got, "enter") || !keysContain(got, "esc") {
 		t.Fatal("focusCommand should include enter and esc")
@@ -65,7 +72,7 @@ func TestShortHelpFor_CommandContextual(t *testing.T) {
 }
 
 func TestShortHelpFor_HelpOnlyHasClose(t *testing.T) {
-	k := defaultKeys()
+	k := defaultKeys(testTR)
 	got := shortHelpFor(focusHelp, k)
 	if !keysContain(got, "esc") {
 		t.Fatal("focusHelp should include esc to close")
@@ -81,25 +88,25 @@ func TestFullHelpFor_AllFocusesNonEmpty(t *testing.T) {
 		focusSearch, focusCommand, focusLinks, focusHelp,
 	}
 	for _, f := range all {
-		sections := fullHelpFor(f)
+		sections := fullHelpFor(f, testTR)
 		if len(sections) == 0 {
-			t.Fatalf("fullHelpFor(%v) returned no sections", focusLabel(f))
+			t.Fatalf("fullHelpFor(%v) returned no sections", focusLabel(f, testTR))
 		}
 		total := 0
 		for _, sec := range sections {
 			total += len(sec.Entries)
 		}
 		if total == 0 {
-			t.Fatalf("fullHelpFor(%v) returned no entries", focusLabel(f))
+			t.Fatalf("fullHelpFor(%v) returned no entries", focusLabel(f, testTR))
 		}
 	}
 }
 
 func TestFullHelpFor_ReaderHasArticleOps(t *testing.T) {
-	sections := fullHelpFor(focusReader)
+	sections := fullHelpFor(focusReader, testTR)
 	var articleSec *helpSection
 	for i := range sections {
-		if sections[i].Title == "Article ops" {
+		if sections[i].Title == testTR.Help.SectionArticle {
 			articleSec = &sections[i]
 			break
 		}
@@ -123,10 +130,10 @@ func TestFullHelpFor_ReaderHasArticleOps(t *testing.T) {
 }
 
 func TestFullHelpFor_SearchHasQuerySyntax(t *testing.T) {
-	sections := fullHelpFor(focusSearch)
+	sections := fullHelpFor(focusSearch, testTR)
 	var hasSyntax bool
 	for _, sec := range sections {
-		if sec.Title == "Query syntax" {
+		if sec.Title == testTR.Help.SectionQuerySyn {
 			hasSyntax = true
 			break
 		}
@@ -138,17 +145,17 @@ func TestFullHelpFor_SearchHasQuerySyntax(t *testing.T) {
 
 func TestFocusLabel_AllFocuses(t *testing.T) {
 	cases := map[focus]string{
-		focusFeeds:    "Feeds",
-		focusArticles: "Articles",
-		focusReader:   "Reader",
-		focusSettings: "Settings",
-		focusSearch:   "Search",
-		focusCommand:  "Command",
-		focusLinks:    "Links",
-		focusHelp:     "Help",
+		focusFeeds:    testTR.Focus.Feeds,
+		focusArticles: testTR.Focus.Articles,
+		focusReader:   testTR.Focus.Reader,
+		focusSettings: testTR.Focus.Settings,
+		focusSearch:   testTR.Focus.Search,
+		focusCommand:  testTR.Focus.Command,
+		focusLinks:    testTR.Focus.Links,
+		focusHelp:     testTR.Focus.Help,
 	}
 	for f, want := range cases {
-		if got := focusLabel(f); got != want {
+		if got := focusLabel(f, testTR); got != want {
 			t.Fatalf("focusLabel(%v) = %q, want %q", f, got, want)
 		}
 	}

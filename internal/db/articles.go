@@ -40,16 +40,26 @@ func (d *DB) UpsertArticle(a Article) (bool, error) {
 		return false, fmt.Errorf("check article: %w", err)
 	}
 
+	// last_fetched_at is bumped on both INSERT and UPDATE so TrimArticles
+	// can distinguish "still in this RSS response" from "rolled off the
+	// feed and safe to prune". We bind a Go time.Time instead of using
+	// SQLite's CURRENT_TIMESTAMP: the go-sqlite3 driver formats time
+	// values with subseconds + timezone, while CURRENT_TIMESTAMP returns
+	// seconds-only strings. Mixing the two breaks lexicographic
+	// comparison (space < period) and causes TrimArticles to wrongly
+	// prune freshly-upserted rows.
+	fetchedAt := time.Now().UTC()
 	_, err = d.sql.Exec(`
 		INSERT INTO articles
-			(feed_id, title, url, description, content, published_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+			(feed_id, title, url, description, content, published_at, last_fetched_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(feed_id, url) DO UPDATE SET
-			title        = excluded.title,
-			description  = excluded.description,
-			content      = excluded.content,
-			published_at = excluded.published_at
-	`, a.FeedID, a.Title, a.URL, a.Description, a.Content, a.PublishedAt)
+			title           = excluded.title,
+			description     = excluded.description,
+			content         = excluded.content,
+			published_at    = excluded.published_at,
+			last_fetched_at = excluded.last_fetched_at
+	`, a.FeedID, a.Title, a.URL, a.Description, a.Content, a.PublishedAt, fetchedAt)
 	if err != nil {
 		return false, fmt.Errorf("upsert article: %w", err)
 	}
@@ -376,7 +386,14 @@ func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
 // TrimArticles deletes the oldest read articles for a feed so that at most
 // `max` rows remain. Unread articles are always kept, even if this leaves
 // the feed above the limit.
-func (d *DB) TrimArticles(feedID int64, max int) error {
+// TrimArticles prunes old read articles in a feed once its total count
+// exceeds max. cutoff acts as a safety line: any article whose
+// last_fetched_at is >= cutoff is considered "still in the current RSS
+// response" and is never deleted, even if it's read. Without this
+// guard, marking an item read right before a refresh would delete it,
+// and the next fetch would re-insert it as unread (the RSS still
+// lists it).
+func (d *DB) TrimArticles(feedID int64, max int, cutoff time.Time) error {
 	if max <= 0 {
 		return nil
 	}
@@ -384,12 +401,14 @@ func (d *DB) TrimArticles(feedID int64, max int) error {
 		DELETE FROM articles
 		WHERE id IN (
 			SELECT id FROM articles
-			WHERE feed_id = ? AND read_at IS NOT NULL
+			WHERE feed_id = ?
+			  AND read_at IS NOT NULL
+			  AND (last_fetched_at IS NULL OR last_fetched_at < ?)
 			ORDER BY published_at ASC, id ASC
 			LIMIT MAX(0, (
 				SELECT COUNT(*) FROM articles WHERE feed_id = ?
 			) - ?)
 		)
-	`, feedID, feedID, max)
+	`, feedID, cutoff, feedID, max)
 	return err
 }

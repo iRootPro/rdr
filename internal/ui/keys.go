@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"github.com/charmbracelet/bubbles/key"
+
+	"github.com/iRootPro/rdr/internal/i18n"
+)
 
 type keyMap struct {
 	Quit       key.Binding
@@ -40,43 +44,44 @@ type keyMap struct {
 	ToggleFold    key.Binding
 }
 
-func defaultKeys() keyMap {
+func defaultKeys(tr *i18n.Strings) keyMap {
+	k := tr.Keys
 	return keyMap{
-		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
-		Up:         key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "up")),
-		Down:       key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "down")),
-		Left:       key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h", "back")),
-		Right:      key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l", "forward")),
-		Tab:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
-		Top:        key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
-		Bottom:     key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		PageUp:     key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "page up")),
-		PageDown:   key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "page down")),
-		Enter:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
-		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-		RefreshOne: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh current")),
-		RefreshAll: key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh all")),
-		OpenURL:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")),
-		FullArticle: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full article")),
-		Settings:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
-		Search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
-		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", k.Quit)),
+		Up:         key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", k.Up)),
+		Down:       key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", k.Down)),
+		Left:       key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h", k.Back)),
+		Right:      key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l", k.Forward)),
+		Tab:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", k.SwitchPane)),
+		Top:        key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", k.Top)),
+		Bottom:     key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", k.Bottom)),
+		PageUp:     key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", k.PageUp)),
+		PageDown:   key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", k.PageDown)),
+		Enter:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", k.Open)),
+		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", k.Esc)),
+		RefreshOne: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", k.RefreshOne)),
+		RefreshAll: key.NewBinding(key.WithKeys("R"), key.WithHelp("R", k.RefreshAll)),
+		OpenURL:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", k.OpenBrowser)),
+		FullArticle: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", k.FullArticle)),
+		Settings:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", k.Settings)),
+		Search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", k.Search)),
+		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", k.Help)),
 
-		NextUnread:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next unread")),
-		Zen:           key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zen")),
-		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "command")),
-		Star:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "toggle star")),
-		FilterAll:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all articles")),
-		FilterUnread:  key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "unread only")),
-		FilterStarred: key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "starred only")),
-		NextArticle:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next article")),
-		PrevArticle:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "prev article")),
-		LinkPicker:    key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "links")),
-		ToggleRead:    key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "toggle read")),
-		MarkAllRead:   key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "mark all read")),
-		YankURL:       key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
-		YankMarkdown:  key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", "yank [title](url)")),
-		ToggleFold:    key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "collapse category")),
+		NextUnread:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", k.NextUnread)),
+		Zen:           key.NewBinding(key.WithKeys("z"), key.WithHelp("z", k.Zen)),
+		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", k.Command)),
+		Star:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", k.ToggleStar)),
+		FilterAll:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", k.FilterAll)),
+		FilterUnread:  key.NewBinding(key.WithKeys("u"), key.WithHelp("u", k.FilterUnread)),
+		FilterStarred: key.NewBinding(key.WithKeys("S"), key.WithHelp("S", k.FilterStarred)),
+		NextArticle:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", k.NextArticle)),
+		PrevArticle:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", k.PrevArticle)),
+		LinkPicker:    key.NewBinding(key.WithKeys("L"), key.WithHelp("L", k.LinkPicker)),
+		ToggleRead:    key.NewBinding(key.WithKeys("x"), key.WithHelp("x", k.ToggleRead)),
+		MarkAllRead:   key.NewBinding(key.WithKeys("X"), key.WithHelp("X", k.MarkAllRead)),
+		YankURL:       key.NewBinding(key.WithKeys("y"), key.WithHelp("y", k.YankURL)),
+		YankMarkdown:  key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", k.YankMarkdown)),
+		ToggleFold:    key.NewBinding(key.WithKeys(" "), key.WithHelp("space", k.ToggleFold)),
 	}
 }
 
@@ -115,7 +120,7 @@ func shortHelpFor(f focus, k keyMap) []key.Binding {
 	case focusReader:
 		return []key.Binding{k.Up, k.Down, k.NextArticle, k.PrevArticle, k.FullArticle, k.LinkPicker, k.OpenURL, k.YankURL, k.Star, k.Back, k.Help}
 	case focusSettings:
-		return []key.Binding{k.Up, k.Down, k.Enter, k.Back, k.Help, k.Quit}
+		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Back, k.Help, k.Quit}
 	case focusSearch:
 		return []key.Binding{k.Up, k.Down, k.Enter, k.Back, k.Help}
 	case focusCommand:
@@ -131,74 +136,76 @@ func shortHelpFor(f focus, k keyMap) []key.Binding {
 // fullHelpFor returns grouped sections shown on the full-screen help
 // overlay. Each focus contributes its own context sections; a Global
 // section always comes last.
-func fullHelpFor(f focus) []helpSection {
+func fullHelpFor(f focus, tr *i18n.Strings) []helpSection {
+	h := tr.Help
 	global := helpSection{
-		Title: "Global",
+		Title: h.SectionGlobal,
 		Entries: []helpEntry{
-			{"/", "open search picker"},
-			{":", "open command mode"},
-			{"R", "sync all feeds"},
-			{"s", "open settings"},
-			{"z", "toggle zen mode"},
-			{"?", "toggle this help"},
-			{"q", "quit"},
+			{"/", h.DescGlobalSearch},
+			{":", h.DescGlobalCommand},
+			{"R", h.DescGlobalSync},
+			{"s", h.DescGlobalSettings},
+			{"z", h.DescGlobalZen},
+			{"?", h.DescGlobalHelp},
+			{"q", h.DescGlobalQuit},
 		},
 	}
 
 	switch f {
 	case focusFeeds, focusArticles:
 		nav := helpSection{
-			Title: "Navigation",
+			Title: h.SectionNav,
 			Entries: []helpEntry{
-				{"j / k", "down / up"},
-				{"tab", "switch pane"},
-				{"enter", "open selection"},
-				{"g / G", "top / bottom"},
-				{"^u / ^d", "page up / down"},
-				{"n", "next unread"},
-				{"space", "collapse category (feeds pane)"},
+				{"j / k", h.DescDownUp},
+				{"tab", h.DescSwitchPane},
+				{"enter", h.DescOpenSelection},
+				{"g / G", h.DescTopBottom},
+				{"^u / ^d", h.DescPagePrefix},
+				{"n", h.DescNextUnread},
+				{"space", h.DescCollapseCat},
 			},
 		}
 		article := helpSection{
-			Title: "Article ops",
+			Title: h.SectionArticle,
 			Entries: []helpEntry{
-				{"x / X", "toggle / mark all read"},
-				{"m", "toggle star"},
-				{"y / Y", "yank URL / [title](url)"},
-				{"o", "open in browser"},
+				{"x / X", h.DescToggleMarkAll},
+				{"m", h.DescToggleStar},
+				{"p", h.DescTogglePreview},
+				{"y / Y", h.DescYankURLMD},
+				{"o", h.DescOpenBrowser},
 			},
 		}
 		filters := helpSection{
-			Title: "Filters",
+			Title: h.SectionFilters,
 			Entries: []helpEntry{
-				{"a", "show all articles"},
-				{"u", "show unread only"},
-				{"S", "show starred only"},
+				{"a", h.DescShowAll},
+				{"u", h.DescShowUnread},
+				{"S", h.DescShowStarred},
 			},
 		}
 		return []helpSection{nav, article, filters, global}
 
 	case focusReader:
 		nav := helpSection{
-			Title: "Reader",
+			Title: h.SectionReader,
 			Entries: []helpEntry{
-				{"j / k", "scroll line"},
-				{"space", "page down"},
-				{"J / K", "next / prev article"},
-				{"g / G", "top / bottom"},
-				{"esc", "back to articles"},
+				{"j / k", h.DescScrollLine},
+				{"space", h.DescPageDown},
+				{"J / K", h.DescNextPrevArt},
+				{"g / G", h.DescTopBottom},
+				{"esc", h.DescBackToArticles},
 			},
 		}
 		article := helpSection{
-			Title: "Article ops",
+			Title: h.SectionArticle,
 			Entries: []helpEntry{
-				{"f", "load full article"},
-				{"L", "link picker"},
-				{"o", "open in browser"},
-				{"y / Y", "yank URL / [title](url)"},
-				{"x", "toggle read"},
-				{"m", "toggle star"},
-				{":images", "toggle inline images"},
+				{"f", h.DescLoadFull},
+				{"L", h.DescLinkPicker},
+				{"o", h.DescOpenBrowser},
+				{"y / Y", h.DescYankURLMD},
+				{"x", h.DescToggleRead},
+				{"m", h.DescToggleStar},
+				{":images", h.DescToggleImages},
 			},
 		}
 		return []helpSection{nav, article, global}
@@ -206,13 +213,38 @@ func fullHelpFor(f focus) []helpSection {
 	case focusSettings:
 		return []helpSection{
 			{
-				Title: "Feed settings",
+				Title: h.SectionFeedSet,
 				Entries: []helpEntry{
-					{"j / k", "down / up"},
-					{"a", "add feed"},
-					{"d", "delete feed"},
-					{"e", "rename feed"},
-					{"esc", "close"},
+					{"j / k", h.DescFeedsDownUp},
+					{"tab", h.DescFeedsSwitchSec},
+					{"a", h.DescFeedsAdd},
+					{"d", h.DescFeedsDel},
+					{"e", h.DescFeedsRename},
+					{"c", h.DescFeedsCategory},
+					{"i", h.DescFeedsImport},
+					{"E", h.DescFeedsExport},
+					{"esc", h.DescFeedsClose},
+				},
+			},
+			{
+				Title: h.SectionFoldersSet,
+				Entries: []helpEntry{
+					{"j / k", h.DescFeedsDownUp},
+					{"tab", h.DescFeedsSwitchSec},
+					{"e", h.DescFoldersEdit},
+					{"d", h.DescFoldersDel},
+					{"esc", h.DescFeedsClose},
+				},
+			},
+			{
+				Title: h.SectionSmartFolderSet,
+				Entries: []helpEntry{
+					{"j / k", h.DescFeedsDownUp},
+					{"tab", h.DescFeedsSwitchSec},
+					{"a", h.DescSmartFolderAdd},
+					{"d", h.DescSmartFolderDel},
+					{"e", h.DescSmartFolderEdit},
+					{"esc", h.DescFeedsClose},
 				},
 			},
 			global,
@@ -221,24 +253,24 @@ func fullHelpFor(f focus) []helpSection {
 	case focusSearch:
 		return []helpSection{
 			{
-				Title: "Search picker",
+				Title: h.SectionSearch,
 				Entries: []helpEntry{
-					{"↑ / ↓", "navigate results"},
-					{"enter", "open selection"},
-					{"esc", "close"},
+					{"↑ / ↓", h.DescSearchNav},
+					{"enter", h.DescSearchOpen},
+					{"esc", h.DescSearchClose},
 				},
 			},
 			{
-				Title: "Query syntax",
+				Title: h.SectionQuerySyn,
 				Entries: []helpEntry{
-					{"word", "match title or feed name"},
-					{"title:rust", "field match"},
-					{"feed:habr", "feed name"},
-					{"unread", "only unread"},
-					{"starred", "only starred"},
-					{"today", "published today"},
-					{"newer:1w", "newer than 1 week"},
-					{"~title:ad", "negate any atom"},
+					{"word", h.DescSynWord},
+					{"title:rust", h.DescSynTitle},
+					{"feed:habr", h.DescSynFeed},
+					{"unread", h.DescSynUnread},
+					{"starred", h.DescSynStarred},
+					{"today", h.DescSynToday},
+					{"newer:1w", h.DescSynNewer},
+					{"~title:ad", h.DescSynNegate},
 				},
 			},
 			global,
@@ -247,26 +279,26 @@ func fullHelpFor(f focus) []helpSection {
 	case focusCommand:
 		return []helpSection{
 			{
-				Title: "Command mode",
+				Title: h.SectionCommand,
 				Entries: []helpEntry{
-					{"↑ / ↓", "navigate suggestions"},
-					{"tab", "complete highlighted"},
-					{"^p / ^n", "history prev / next"},
-					{"enter", "execute"},
-					{"esc", "cancel"},
+					{"↑ / ↓", h.DescCmdNavSugg},
+					{"tab", h.DescCmdComplete},
+					{"^p / ^n", h.DescCmdHistory},
+					{"enter", h.DescCmdExecute},
+					{"esc", h.DescCmdCancel},
 				},
 			},
 			{
-				Title: "Common commands",
+				Title: h.SectionCommon,
 				Entries: []helpEntry{
-					{":sync", "refresh all feeds"},
-					{":sort date|title", "change sort"},
-					{":filter unread|starred", "set filter"},
-					{":read <query>", "mark matches read"},
-					{":star <query>", "star matches"},
-					{":copy url <query>", "copy URLs to clipboard"},
-					{":import / :export <path>", "OPML in/out"},
-					{":collapseall / :expandall", "toggle all categories"},
+					{":sync", h.DescCmdSync},
+					{":sort date|title", h.DescCmdSort},
+					{":filter unread|starred", h.DescCmdFilter},
+					{":read <query>", h.DescCmdReadQ},
+					{":star <query>", h.DescCmdStarQ},
+					{":copy url <query>", h.DescCmdCopyUrlQ},
+					{":import / :export <path>", h.DescCmdImportExport},
+					{":collapseall / :expandall", h.DescCmdCollapseAll},
 				},
 			},
 		}
@@ -274,12 +306,12 @@ func fullHelpFor(f focus) []helpSection {
 	case focusLinks:
 		return []helpSection{
 			{
-				Title: "Link picker",
+				Title: h.SectionLinks,
 				Entries: []helpEntry{
-					{"j / k", "navigate"},
-					{"g / G", "top / bottom"},
-					{"enter", "open in browser"},
-					{"esc", "close"},
+					{"j / k", h.DescLinksNav},
+					{"g / G", h.DescLinksTop},
+					{"enter", h.DescLinksOpen},
+					{"esc", h.DescLinksClose},
 				},
 			},
 			global,
@@ -288,9 +320,9 @@ func fullHelpFor(f focus) []helpSection {
 	case focusHelp:
 		return []helpSection{
 			{
-				Title: "Help",
+				Title: h.SectionHelp,
 				Entries: []helpEntry{
-					{"esc / ?", "close"},
+					{"esc / ?", h.DescHelpClose},
 				},
 			},
 		}
@@ -300,24 +332,25 @@ func fullHelpFor(f focus) []helpSection {
 
 // focusLabel is the human-readable name of a focus, used in the help
 // screen title and other places where we want to print the mode name.
-func focusLabel(f focus) string {
+func focusLabel(f focus, tr *i18n.Strings) string {
+	fs := tr.Focus
 	switch f {
 	case focusFeeds:
-		return "Feeds"
+		return fs.Feeds
 	case focusArticles:
-		return "Articles"
+		return fs.Articles
 	case focusReader:
-		return "Reader"
+		return fs.Reader
 	case focusSettings:
-		return "Settings"
+		return fs.Settings
 	case focusSearch:
-		return "Search"
+		return fs.Search
 	case focusCommand:
-		return "Command"
+		return fs.Command
 	case focusLinks:
-		return "Links"
+		return fs.Links
 	case focusHelp:
-		return "Help"
+		return fs.Help
 	}
 	return ""
 }
