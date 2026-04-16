@@ -177,8 +177,8 @@ func maxEntryCounterWidth(entries []feedEntry) int {
 }
 
 func listVisibleRows(paneHeight int) int {
-	// Title now lives in the border, so overhead = 0 (border is outside height).
-	n := paneHeight
+	// lipgloss border adds 2 rows (top + bottom); padding(0,1) adds 0 rows.
+	n := paneHeight - 2
 	if n < 1 {
 		return 1
 	}
@@ -207,75 +207,46 @@ func visibleWindow(total, selected, maxVisible int) (start, end int) {
 //	╭─ 󰑫 Ленты ──────────╮
 //	│ content               │
 //	╰───────────────────────╯
-// framePaneWithTitle draws a bordered pane. width/height are the CONTENT
-// dimensions (same semantics as lipgloss Width before). The function adds
-// border chars (+2 cols, +2 rows) and 1-cell padding on each side.
+//
+// Uses lipgloss Border for correct content clipping, then replaces the
+// top border line with a custom title bar.
 func framePaneWithTitle(content, title string, active bool, width, height int) string {
+	style := paneInactive
+	if active {
+		style = paneActive
+	}
+	// Render with lipgloss — it handles Width/MaxWidth/clipping correctly.
+	rendered := style.Width(width).Height(height).Render(content)
+
+	if title == "" {
+		return rendered
+	}
+
+	// Replace the first line (top border) with our custom title border.
+	lines := strings.Split(rendered, "\n")
+	if len(lines) == 0 {
+		return rendered
+	}
+
 	borderColor := colorBorder
 	if active {
 		borderColor = colorAccent
 	}
 	bs := lipgloss.NewStyle().Foreground(borderColor).Background(colorBG)
 	ts := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
-	pad := lipgloss.NewStyle().Background(colorBG)
 
-	// innerW = width of the horizontal dash run between ╭ and ╮.
-	// This equals the content width passed in (matches old lipgloss Width
-	// semantics where Width = content area, border added on top).
-	innerW := width
-	if innerW < 4 {
-		innerW = 4
+	// Build custom top line matching the width of the original.
+	origW := lipgloss.Width(lines[0])
+	titleStr := " " + title + " "
+	titleCells := lipgloss.Width(titleStr)
+	dashesAfter := origW - 2 - 1 - titleCells // -2 for ╭╮, -1 for dash before title
+	if dashesAfter < 0 {
+		dashesAfter = 0
 	}
+	lines[0] = bs.Render("╭─") + ts.Render(titleStr) +
+		bs.Render(strings.Repeat("─", dashesAfter)+"╮")
 
-	// ── top border ──
-	var top string
-	if title != "" {
-		titleStr := " " + title + " "
-		titleCells := lipgloss.Width(titleStr)
-		dashesAfter := innerW - 1 - titleCells
-		if dashesAfter < 0 {
-			dashesAfter = 0
-		}
-		top = bs.Render("╭─") + ts.Render(titleStr) +
-			bs.Render(strings.Repeat("─", dashesAfter)+"╮")
-	} else {
-		top = bs.Render("╭" + strings.Repeat("─", innerW) + "╮")
-	}
-
-	// ── bottom border ──
-	bottom := bs.Render("╰" + strings.Repeat("─", innerW) + "╯")
-
-	// ── content lines ──
-	// Each row: │ + 1 pad + content + 1 pad + │
-	// So visible content per row = innerW - 2.
-	contentW := innerW - 2
-	if contentW < 1 {
-		contentW = 1
-	}
-	lines := strings.Split(content, "\n")
-	if len(lines) > height {
-		lines = lines[:height]
-	}
-	for len(lines) < height {
-		lines = append(lines, "")
-	}
-
-	border := bs.Render("│")
-	space := pad.Render(" ")
-	rows := make([]string, len(lines))
-	for i, line := range lines {
-		// Hard-truncate to contentW using ansi.Truncate which correctly
-		// handles ANSI escape codes, then fill remaining width with bg.
-		clipped := ansi.Truncate(line, contentW, "")
-		filled := paintLineBG(clipped, contentW)
-		rows[i] = border + space + filled + space + border
-	}
-
-	all := make([]string, 0, len(rows)+2)
-	all = append(all, top)
-	all = append(all, rows...)
-	all = append(all, bottom)
-	return strings.Join(all, "\n")
+	return strings.Join(lines, "\n")
 }
 
 func truncate(s string, max int) string {

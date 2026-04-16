@@ -55,10 +55,9 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	}
 
 	// Max length for truncating the title text: subtract the prefix
-	// "› " (2 cells), the marker "● "/"★ " (2 cells) and the optional
-	// cross-feed tag. Extra -2 accounts for ambiguous-width Unicode
-	// glyphs (●, ★) that some terminals render wider than Go expects.
-	titleTextBudget := titleCellW - 6 - feedTagW
+	// "› " / "  " (2 cells), the marker "● "/"★ " (2 cells) and the
+	// optional cross-feed tag from the title cell width.
+	titleTextBudget := titleCellW - 4 - feedTagW
 	if titleTextBudget < 1 {
 		titleTextBudget = 1
 	}
