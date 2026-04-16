@@ -33,8 +33,7 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	// 1-char breathing room and an extra cell of space-before so the
 	// title doesn't butt against the timestamps.
 	const whenCellW = 14
-	// Inner text area of the pane = width - 2 (padding). The title
-	// cell consumes everything that's left.
+	// Inner text area of the pane = width - 2 (padding inside border).
 	titleCellW := width - 2 - whenCellW
 	if titleCellW < 1 {
 		titleCellW = 1
