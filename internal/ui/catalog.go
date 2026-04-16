@@ -317,6 +317,7 @@ func (m Model) updateLangPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		chosen := langOptions[m.langPickerSel]
 		m.lang = chosen.Lang
 		m.tr = i18n.For(chosen.Lang)
+		m.keys = defaultKeys(m.tr)
 		_ = m.db.SetLanguage(string(chosen.Lang))
 		// Now proceed to catalog with onboarding.
 		if len(m.smartFolders) == 0 {
