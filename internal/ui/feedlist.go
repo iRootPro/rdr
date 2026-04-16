@@ -261,11 +261,12 @@ func framePaneWithTitle(content, title string, active bool, width, height int) s
 
 	border := bs.Render("│")
 	space := pad.Render(" ")
+	clip := lipgloss.NewStyle().MaxWidth(contentW)
 	rows := make([]string, len(lines))
 	for i, line := range lines {
-		// Fill the line to contentW using paintLineBG which handles
-		// ANSI resets properly and pads with theme background.
-		filled := paintLineBG(line, contentW)
+		// Clip to contentW first (hard limit), then fill with bg.
+		clipped := clip.Render(line)
+		filled := paintLineBG(clipped, contentW)
 		rows[i] = border + space + filled + space + border
 	}
 
