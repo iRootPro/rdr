@@ -914,7 +914,7 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = focusFeeds
 		return m, nil
 	case key.Matches(msg, m.keys.Tab):
-		m.settingsSection = (m.settingsSection + 1) % 4
+		m.settingsSection = (m.settingsSection + 1) % 5
 		return m, nil
 	case key.Matches(msg, m.keys.Help):
 		m.helpPrev = m.focus
