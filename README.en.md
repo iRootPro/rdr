@@ -273,8 +273,14 @@ ollama pull llama3
 ```
 Endpoint: `http://localhost:11434/v1`, Model: `llama3`
 
+**Claude** (via Claude Max/Pro subscription, no API tokens):
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+Provider: `claude` (no endpoint or key needed). Uses `claude --print` CLI.
+
 **OpenAI** (cloud, paid):
-Endpoint: `https://api.openai.com/v1`, API Key: `sk-...`, Model: `gpt-4o-mini`
+Provider: `openai`, Endpoint: `https://api.openai.com/v1`, API Key: `sk-...`, Model: `gpt-4o-mini`
 
 ## Feed Catalog
 

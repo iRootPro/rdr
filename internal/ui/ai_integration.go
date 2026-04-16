@@ -17,10 +17,15 @@ import (
 
 // loadAIConfig reads AI settings from the database.
 func loadAIConfig(database *db.DB) ai.Config {
+	provider, _ := database.GetAIProvider()
 	endpoint, _ := database.GetAIEndpoint()
 	apiKey, _ := database.GetAIKey()
 	model, _ := database.GetAIModel()
+	if provider == "" {
+		provider = ai.ProviderOpenAI
+	}
 	return ai.Config{
+		Provider: provider,
 		Endpoint: endpoint,
 		APIKey:   apiKey,
 		Model:    model,
@@ -92,7 +97,12 @@ func buildAIRows(m *Model) []aiRow {
 	if len(mask) > 4 {
 		mask = "****" + mask[len(mask)-4:]
 	}
+	providerDisplay := m.aiConfig.Provider
+	if providerDisplay == "" {
+		providerDisplay = ai.ProviderOpenAI
+	}
 	return []aiRow{
+		{m.tr.Settings.AIProviderLabel, providerDisplay, "provider"},
 		{m.tr.Settings.AIEndpointLabel, m.aiConfig.Endpoint, "endpoint"},
 		{m.tr.Settings.AIKeyLabel, mask, "key"},
 		{m.tr.Settings.AIModelLabel, m.aiConfig.Model, "model"},
@@ -162,12 +172,21 @@ func (m Model) updateSettingsAI(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsAISel--
 		}
 		return m, nil
-	case keyIs(msg, "e"):
+	case key.Matches(msg, m.keys.Enter), keyIs(msg, "e"):
 		if m.settingsAISel >= len(rows) {
 			return m, nil
 		}
+		// Provider toggles between openai/claude instead of text input.
+		if rows[m.settingsAISel].Key == "provider" {
+			if m.aiConfig.Provider == ai.ProviderClaude {
+				m.aiConfig.Provider = ai.ProviderOpenAI
+			} else {
+				m.aiConfig.Provider = ai.ProviderClaude
+			}
+			_ = m.db.SetAIProvider(m.aiConfig.Provider)
+			return m, nil
+		}
 		m.settingsMode = smAIEdit
-		// Pre-fill with current value.
 		switch rows[m.settingsAISel].Key {
 		case "endpoint":
 			m.settingsInput.SetValue(m.aiConfig.Endpoint)
@@ -190,6 +209,8 @@ func submitAIEdit(m *Model, value string) {
 		return
 	}
 	switch rows[m.settingsAISel].Key {
+	case "provider":
+		// provider is toggled via Enter, not edited via text
 	case "endpoint":
 		m.aiConfig.Endpoint = value
 		_ = m.db.SetAIEndpoint(value)
