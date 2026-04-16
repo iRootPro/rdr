@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -67,12 +68,18 @@ type generalRow struct {
 }
 
 func buildGeneralRows(m *Model) []generalRow {
+	mins := int(m.refreshInterval / time.Minute)
+	refreshDisplay := m.tr.Settings.RefreshOff
+	if mins > 0 {
+		refreshDisplay = fmt.Sprintf(m.tr.Settings.RefreshFmt, mins)
+	}
 	return []generalRow{
 		{m.tr.Settings.LanguageLabel, langDisplayName(m.lang)},
 		{m.tr.Settings.ImagesLabel, boolOnOff(m.showImages, m.tr)},
 		{m.tr.Settings.SortLabel, sortDisplayName(m.sortField, m.sortReverse, m.tr)},
 		{m.tr.Settings.PreviewLabel, boolOnOff(m.showPreview, m.tr)},
 		{m.tr.Settings.ThemeLabel, m.themeName},
+		{m.tr.Settings.RefreshLabel, refreshDisplay},
 	}
 }
 
@@ -117,6 +124,8 @@ func renderSettings(m *Model, input string, width, height int) string {
 		renderFoldersSection(&b, m, input)
 	case secSmartFolders:
 		renderSmartFoldersSection(&b, m, input)
+	case secAfterSync:
+		renderAfterSyncSection(&b, m, input)
 	default:
 		renderFeedsSection(&b, m, input)
 	}
@@ -134,6 +143,7 @@ func renderSettingsTabs(tr *i18n.Strings, active settingsSection) string {
 		{tr.Settings.SectionGeneral, secGeneral},
 		{tr.Settings.SectionFolders, secFolders},
 		{tr.Settings.SectionSmartFolders, secSmartFolders},
+		{tr.Settings.SectionAfterSync, secAfterSync},
 	}
 	sepStyle := lipgloss.NewStyle().Background(colorBG)
 	var cells []string
@@ -430,4 +440,41 @@ func renderGeneralSection(m *Model) string {
 		}
 	}
 	return b.String()
+}
+
+// renderAfterSyncSection draws the list of after-sync commands. Same
+// add/edit/delete flow as smart folders.
+func renderAfterSyncSection(b *strings.Builder, m *Model, input string) {
+	tr := m.tr
+	switch m.settingsMode {
+	case smAfterSyncAdd:
+		b.WriteString(tr.Settings.AfterSyncAdd + "\n\n")
+		b.WriteString(input)
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
+		return
+	case smAfterSyncEdit:
+		b.WriteString(tr.Settings.AfterSyncEdit + "\n\n")
+		b.WriteString(input)
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
+		return
+	}
+
+	if len(m.afterSyncCommands) == 0 {
+		b.WriteString(readStyle.Render(tr.Settings.NoAfterSync))
+	} else {
+		for i, cmd := range m.afterSyncCommands {
+			prefix := "  "
+			style := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
+			if i == m.settingsAfterSyncSel {
+				prefix = "› "
+				style = itemSelected
+			}
+			b.WriteString(prefix + style.Render(cmd))
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(settingsKeyHint.Render(tr.Settings.AfterSyncHint))
 }
