@@ -187,6 +187,7 @@ type Model struct {
 	settingsSmartFolderSel    int
 	settingsAfterSyncSel      int
 	catalogSel                int
+	catalogOnboarding         bool
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
 	pendingName               string
@@ -673,6 +674,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.focus = focusCatalog
 			m.catalogSel = 0
+			m.catalogOnboarding = true
 		}
 		return m, nil
 

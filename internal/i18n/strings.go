@@ -37,6 +37,11 @@ type CatalogStrings struct {
 	Added    string
 	Crumb    string
 
+	// Onboarding welcome text.
+	Welcome1 string // main greeting
+	Welcome2 string // what rdr is
+	Welcome3 string // what to do now
+
 	// Default smart folder names (created on onboarding).
 	FolderInbox    string
 	FolderToday    string
@@ -768,6 +773,10 @@ var en = Strings{
 		Added:    "subscribed",
 		Crumb:    "discover",
 
+		Welcome1: "Welcome to rdr!",
+		Welcome2: "A terminal RSS reader with vim-style navigation, full article rendering, smart folders, and search with a query language.",
+		Welcome3: "Pick a few feeds below to get started. Press Enter to subscribe, then Esc to start reading.",
+
 		FolderInbox:    "Inbox",
 		FolderToday:    "Today",
 		FolderThisWeek: "This Week",
@@ -1131,6 +1140,10 @@ var ru = Strings{
 		Hint:     "j/k навигация · enter подписаться · esc закрыть",
 		Added:    "подписан",
 		Crumb:    "каталог",
+
+		Welcome1: "Добро пожаловать в rdr!",
+		Welcome2: "Терминальная читалка RSS с vim-навигацией, полнотекстовым чтением статей, умными папками и поиском с языком запросов.",
+		Welcome3: "Выберите ленты ниже, чтобы начать. Enter — подписаться, затем Esc — перейти к чтению.",
 
 		FolderInbox:    "Входящие",
 		FolderToday:    "Сегодня",

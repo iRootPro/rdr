@@ -153,6 +153,8 @@ func buildCatalogRows(m Model) []catalogRow {
 func renderCatalog(m Model, width, height int) string {
 	tr := m.tr
 	hintStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true)
+	accentStyle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
+	textStyle := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
 
 	allRows := buildCatalogRows(m)
 
@@ -165,8 +167,27 @@ func renderCatalog(m Model, width, height int) string {
 		}
 	}
 
-	// Visible area: height minus subtitle(2) and hint(2).
-	visRows := height - 4
+	var b strings.Builder
+
+	// Welcome header for onboarding.
+	headerRows := 0
+	if m.catalogOnboarding {
+		b.WriteString("\n")
+		b.WriteString(accentStyle.Render("  " + tr.Catalog.Welcome1))
+		b.WriteString("\n\n")
+		b.WriteString(textStyle.Render("  " + tr.Catalog.Welcome2))
+		b.WriteString("\n\n")
+		b.WriteString(hintStyle.Render("  " + tr.Catalog.Welcome3))
+		b.WriteString("\n\n")
+		headerRows = 7
+	} else {
+		b.WriteString(hintStyle.Render(tr.Catalog.Subtitle))
+		b.WriteString("\n\n")
+		headerRows = 2
+	}
+
+	// Visible area for the scrollable list.
+	visRows := height - headerRows - 2 // -2 for hint at bottom
 	if visRows < 5 {
 		visRows = 5
 	}
@@ -184,10 +205,6 @@ func renderCatalog(m Model, width, height int) string {
 			start = 0
 		}
 	}
-
-	var b strings.Builder
-	b.WriteString(hintStyle.Render(tr.Catalog.Subtitle))
-	b.WriteString("\n\n")
 
 	for i := start; i < end; i++ {
 		b.WriteString(allRows[i].Line)
