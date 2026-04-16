@@ -280,9 +280,21 @@ func truncate(s string, max int) string {
 	if max <= 1 {
 		return "…"
 	}
-	runes := []rune(s)
-	if len(runes) <= max {
+	if lipgloss.Width(s) <= max {
 		return s
 	}
-	return string(runes[:max-1]) + "…"
+	runes := []rune(s)
+	// Start from approximate position and shrink until it fits.
+	hi := max - 1
+	if hi > len(runes) {
+		hi = len(runes)
+	}
+	for hi > 0 {
+		candidate := string(runes[:hi]) + "…"
+		if lipgloss.Width(candidate) <= max {
+			return candidate
+		}
+		hi--
+	}
+	return "…"
 }
