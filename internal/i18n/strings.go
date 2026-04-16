@@ -36,6 +36,12 @@ type CatalogStrings struct {
 	Hint     string
 	Added    string
 	Crumb    string
+
+	// Default smart folder names (created on onboarding).
+	FolderInbox    string
+	FolderToday    string
+	FolderThisWeek string
+	FolderStarred  string
 }
 
 type SettingsStrings struct {
@@ -761,6 +767,11 @@ var en = Strings{
 		Hint:     "j/k navigate · enter subscribe · esc close",
 		Added:    "subscribed",
 		Crumb:    "discover",
+
+		FolderInbox:    "Inbox",
+		FolderToday:    "Today",
+		FolderThisWeek: "This Week",
+		FolderStarred:  "Starred",
 	},
 }
 
@@ -1120,6 +1131,11 @@ var ru = Strings{
 		Hint:     "j/k навигация · enter подписаться · esc закрыть",
 		Added:    "подписан",
 		Crumb:    "каталог",
+
+		FolderInbox:    "Входящие",
+		FolderToday:    "Сегодня",
+		FolderThisWeek: "За неделю",
+		FolderStarred:  "Избранные",
 	},
 }
 

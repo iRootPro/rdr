@@ -6,6 +6,9 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/iRootPro/rdr/internal/db"
+	"github.com/iRootPro/rdr/internal/i18n"
 )
 
 // CatalogEntry is one feed in the built-in discover catalog.
@@ -218,6 +221,23 @@ func catalogFlatIndex(idx int) *CatalogEntry {
 // catalogLen returns the total number of entries in the catalog.
 func catalogLen() int {
 	return len(catalog)
+}
+
+// seedSmartFolders creates the default smart folders on first launch,
+// using localized names from the current language.
+func seedSmartFolders(database *db.DB, tr *i18n.Strings) {
+	defaults := []struct {
+		Name  string
+		Query string
+	}{
+		{tr.Catalog.FolderInbox, "unread"},
+		{tr.Catalog.FolderToday, "today"},
+		{tr.Catalog.FolderThisWeek, "newer:1w unread"},
+		{tr.Catalog.FolderStarred, "starred"},
+	}
+	for _, d := range defaults {
+		_, _ = database.InsertSmartFolder(d.Name, d.Query)
+	}
 }
 
 // updateCatalog handles keystrokes in the catalog overlay.
