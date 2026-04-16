@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/iRootPro/rdr/internal/i18n"
 )
@@ -261,11 +262,11 @@ func framePaneWithTitle(content, title string, active bool, width, height int) s
 
 	border := bs.Render("│")
 	space := pad.Render(" ")
-	clip := lipgloss.NewStyle().MaxWidth(contentW)
 	rows := make([]string, len(lines))
 	for i, line := range lines {
-		// Clip to contentW first (hard limit), then fill with bg.
-		clipped := clip.Render(line)
+		// Hard-truncate to contentW using ansi.Truncate which correctly
+		// handles ANSI escape codes, then fill remaining width with bg.
+		clipped := ansi.Truncate(line, contentW, "")
 		filled := paintLineBG(clipped, contentW)
 		rows[i] = border + space + filled + space + border
 	}
@@ -284,18 +285,5 @@ func truncate(s string, max int) string {
 	if lipgloss.Width(s) <= max {
 		return s
 	}
-	runes := []rune(s)
-	// Start from approximate position and shrink until it fits.
-	hi := max - 1
-	if hi > len(runes) {
-		hi = len(runes)
-	}
-	for hi > 0 {
-		candidate := string(runes[:hi]) + "…"
-		if lipgloss.Width(candidate) <= max {
-			return candidate
-		}
-		hi--
-	}
-	return "…"
+	return ansi.Truncate(s, max-1, "") + "…"
 }
