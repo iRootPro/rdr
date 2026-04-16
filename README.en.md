@@ -6,7 +6,7 @@ Terminal RSS/Atom feed reader built with Go, [Bubble Tea](https://github.com/cha
 
 Vim-style navigation, full article reading, smart folders, query language search, 4 color themes, Russian keyboard layout support.
 
-![rdr demo](demo/demo.gif)
+![rdr demo](demo/demo_en.gif)
 
 ## Features
 
@@ -163,13 +163,15 @@ Feeds and smart folders from the config are synced into the database on every la
 | `L` | Link picker |
 | `o` | Open URL in browser |
 | `y` / `Y` | Copy URL / markdown |
+| `t` | Translate article (AI) |
+| `Ctrl+s` | Summarize article (AI) |
 | `x` | Toggle read |
 | `m` | Toggle star |
 | `esc` | Back to list |
 
 ### Settings
 
-Tabs: Feeds · General · Folders · Smart Folders · Auto-commands
+Tabs: Feeds · General · Folders · Smart Folders · Auto-commands · AI
 
 | Key | Action |
 |-----|--------|
@@ -234,6 +236,51 @@ Invoked via `:` (command mode). Tab autocomplete available.
 | `:collapseall` | Collapse all categories |
 | `:expandall` | Expand all categories |
 | `:q` | Quit |
+
+## AI: Translation & Summarization
+
+rdr supports article translation and summarization via any OpenAI-compatible API.
+
+### Setup
+
+Open Settings (`s`) > **AI** tab and configure:
+
+| Parameter | Description |
+|-----------|-------------|
+| Endpoint | API URL (e.g. `http://localhost:11434/v1`) |
+| API Key | API key (optional for local models) |
+| Model | Model name |
+
+### Usage
+
+In the reader:
+- `t` — translate article to the UI language
+- `Ctrl+s` — summarize (3-5 key bullet points)
+
+### Provider Examples
+
+**Apple Intelligence** (macOS, free, on-device):
+```bash
+brew install apfel
+brew services start apfel
+```
+Endpoint: `http://localhost:11434/v1`, Model: `apple-foundationmodel`
+
+**Ollama** (macOS/Linux, free, local):
+```bash
+brew install ollama && ollama serve
+ollama pull llama3
+```
+Endpoint: `http://localhost:11434/v1`, Model: `llama3`
+
+**OpenAI** (cloud, paid):
+Endpoint: `https://api.openai.com/v1`, API Key: `sk-...`, Model: `gpt-4o-mini`
+
+## Feed Catalog
+
+Built-in curated RSS feed directory. Opens automatically on first launch or via `:discover`.
+
+Categories: Tech News, Programming, AI/ML, Security, Linux/Open Source, Science, Health & Fitness, RU Tech, Design.
 
 ## Themes
 
