@@ -27,17 +27,30 @@ Vim-навигация, полнотекстовое чтение статей, 
 
 ## Установка
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap iRootPro/tap
+brew install rdr
+```
+
+### Go
+
 ```bash
 go install github.com/iRootPro/rdr@latest
 ```
 
-Или из исходников:
+### Из исходников
 
 ```bash
 git clone https://github.com/iRootPro/rdr.git
 cd rdr
 go build -o rdr .
 ```
+
+### Бинарники
+
+Готовые бинарники для macOS (arm64, amd64) и Linux (arm64, amd64) доступны на странице [Releases](https://github.com/iRootPro/rdr/releases).
 
 ### Требования
 
