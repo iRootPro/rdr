@@ -154,11 +154,8 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			}
 		}
 
-		titleCellStyle := lipgloss.NewStyle().Width(titleCellW).Background(rowBG)
-		// Fix the right column width and right-align so timestamps sit
-		// flush to the pane's inner edge. Background covers the whole
-		// cell so row backgrounds never show terminal default.
-		whenCellStyle := lipgloss.NewStyle().Width(whenCellW).Align(lipgloss.Right).Background(rowBG)
+		titleCellStyle := lipgloss.NewStyle().Width(titleCellW).MaxWidth(titleCellW).Background(rowBG)
+		whenCellStyle := lipgloss.NewStyle().Width(whenCellW).MaxWidth(whenCellW).Align(lipgloss.Right).Background(rowBG)
 		line := lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			titleCellStyle.Render(title),
