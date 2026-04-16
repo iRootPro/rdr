@@ -244,7 +244,18 @@ func seedSmartFolders(database *db.DB, tr *i18n.Strings) {
 func (m Model) updateCatalog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	total := catalogLen()
 	switch {
-	case key.Matches(msg, m.keys.Back), key.Matches(msg, m.keys.Quit) && msg.String() == "ctrl+c":
+	case key.Matches(msg, m.keys.Quit):
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		// q — treat as close catalog
+		m.focus = focusFeeds
+		if len(m.feeds) > 0 {
+			tick := m.startBusy(m.tr.Status.Fetching)
+			return m, tea.Batch(loadFeedsCmd(m.db), fetchAllCmd(m.fetcher), tick)
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Back):
 		m.focus = focusFeeds
 		if len(m.feeds) > 0 {
 			tick := m.startBusy(m.tr.Status.Fetching)
