@@ -81,6 +81,8 @@ const (
 	smSmartFolderEditName
 	smSmartFolderEditQuery
 	smFolderRename
+	smAfterSyncAdd
+	smAfterSyncEdit
 )
 
 type settingsSection int
@@ -90,6 +92,7 @@ const (
 	secGeneral
 	secFolders
 	secSmartFolders
+	secAfterSync
 )
 
 // availableLangs is the fixed list of languages the General settings pane
@@ -181,6 +184,7 @@ type Model struct {
 	settingsGeneralSel        int
 	settingsFolderSel         int
 	settingsSmartFolderSel    int
+	settingsAfterSyncSel      int
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
 	pendingName               string
@@ -925,6 +929,8 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.updateSettingsFolders(msg)
 	case secSmartFolders:
 		return m.updateSettingsSmartFolders(msg)
+	case secAfterSync:
+		return m.updateSettingsAfterSync(msg)
 	default:
 		return m.updateSettingsFeeds(msg)
 	}
@@ -1249,6 +1255,26 @@ func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
 			_ = m.db.SetTheme(next.Name)
 		}
 		return m, m.showToast(fmt.Sprintf(m.tr.Toasts.ThemeChangedFmt, next.Name))
+	case 5: // Refresh interval
+		options := []int{0, 5, 15, 30, 60}
+		cur := 0
+		mins := int(m.refreshInterval / time.Minute)
+		for i, v := range options {
+			if v == mins {
+				cur = i
+				break
+			}
+		}
+		next := options[(cur+1)%len(options)]
+		m.refreshInterval = time.Duration(next) * time.Minute
+		if m.db != nil {
+			_ = m.db.SetRefreshInterval(next)
+		}
+		label := m.tr.Settings.RefreshOff
+		if next > 0 {
+			label = fmt.Sprintf(m.tr.Settings.RefreshFmt, next)
+		}
+		return m, m.showToast(label)
 	}
 	return m, nil
 }
@@ -1311,6 +1337,55 @@ func (m Model) updateSettingsSmartFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.settingsMode = smSmartFolderEditName
 		m.settingsInput.SetValue(m.smartFolders[m.settingsSmartFolderSel].Name)
+		m.settingsInput.CursorEnd()
+		m.settingsInput.Focus()
+		return m, textinput.Blink
+	}
+	return m, nil
+}
+
+func (m Model) updateSettingsAfterSync(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Down):
+		if m.settingsAfterSyncSel < len(m.afterSyncCommands)-1 {
+			m.settingsAfterSyncSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.settingsAfterSyncSel > 0 {
+			m.settingsAfterSyncSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.settingsAfterSyncSel = 0
+		return m, nil
+	case key.Matches(msg, m.keys.Bottom):
+		if len(m.afterSyncCommands) > 0 {
+			m.settingsAfterSyncSel = len(m.afterSyncCommands) - 1
+		}
+		return m, nil
+	case keyIs(msg, "a"):
+		m.settingsMode = smAfterSyncAdd
+		m.settingsInput.SetValue("")
+		m.settingsInput.Focus()
+		return m, textinput.Blink
+	case keyIs(msg, "d"):
+		if len(m.afterSyncCommands) == 0 {
+			return m, nil
+		}
+		i := m.settingsAfterSyncSel
+		m.afterSyncCommands = append(m.afterSyncCommands[:i], m.afterSyncCommands[i+1:]...)
+		_ = m.db.SetAfterSyncCommands(m.afterSyncCommands)
+		if m.settingsAfterSyncSel >= len(m.afterSyncCommands) && m.settingsAfterSyncSel > 0 {
+			m.settingsAfterSyncSel--
+		}
+		return m, nil
+	case keyIs(msg, "e"):
+		if len(m.afterSyncCommands) == 0 {
+			return m, nil
+		}
+		m.settingsMode = smAfterSyncEdit
+		m.settingsInput.SetValue(m.afterSyncCommands[m.settingsAfterSyncSel])
 		m.settingsInput.CursorEnd()
 		m.settingsInput.Focus()
 		return m, textinput.Blink
@@ -1469,7 +1544,6 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		old := cats[m.settingsFolderSel]
-		// Empty new value is valid — moves feeds into Other.
 		if err := m.db.RenameCategory(old, value); err != nil {
 			m.err = err
 			return m, nil
@@ -1477,9 +1551,32 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsMode = smList
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
-		// Reset cursor: row may have disappeared (empty rename) or moved.
 		m.settingsFolderSel = 0
 		return m, loadFeedsCmd(m.db)
+
+	case smAfterSyncAdd:
+		if value == "" {
+			return m, nil
+		}
+		m.afterSyncCommands = append(m.afterSyncCommands, value)
+		_ = m.db.SetAfterSyncCommands(m.afterSyncCommands)
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, nil
+
+	case smAfterSyncEdit:
+		if value == "" {
+			return m, nil
+		}
+		if m.settingsAfterSyncSel < len(m.afterSyncCommands) {
+			m.afterSyncCommands[m.settingsAfterSyncSel] = value
+			_ = m.db.SetAfterSyncCommands(m.afterSyncCommands)
+		}
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, nil
 	}
 	return m, nil
 }

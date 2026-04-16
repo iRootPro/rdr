@@ -71,11 +71,22 @@ func main() {
 	}
 	ui.ApplyTheme(themeName)
 
+	// Refresh interval: DB overrides config (DB = 0 means check config).
+	refreshMinutes, _ := database.GetRefreshInterval()
+	if refreshMinutes == 0 {
+		refreshMinutes = cfg.RefreshInterval
+	}
+	// After-sync commands: merge DB + config (DB takes priority).
+	afterSync, _ := database.GetAfterSyncCommands()
+	if len(afterSync) == 0 {
+		afterSync = cfg.AfterSyncCommands
+	}
+
 	migrateSmartFolders(database, cfg)
 
 	fetcher := feed.New(database)
 	program := tea.NewProgram(
-		ui.New(database, fetcher, cfg.AfterSyncCommands, cfg.RefreshInterval, home, lang, showImages, sortField, sortReverse, showPreview, themeName),
+		ui.New(database, fetcher, afterSync, refreshMinutes, home, lang, showImages, sortField, sortReverse, showPreview, themeName),
 		tea.WithAltScreen(),
 	)
 	if _, err := program.Run(); err != nil {

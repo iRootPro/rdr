@@ -3,6 +3,8 @@ package db
 import (
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 )
 
 func (d *DB) GetSetting(key string) (string, error) {
@@ -101,6 +103,39 @@ func (d *DB) GetTheme() (string, error) {
 
 func (d *DB) SetTheme(name string) error {
 	return d.SetSetting(settingKeyTheme, name)
+}
+
+const (
+	settingKeyRefreshInterval  = "refresh_interval_minutes"
+	settingKeyAfterSyncCommands = "after_sync_commands"
+)
+
+func (d *DB) GetRefreshInterval() (int, error) {
+	v, err := d.GetSetting(settingKeyRefreshInterval)
+	if err != nil || v == "" {
+		return 0, err
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, nil
+	}
+	return n, nil
+}
+
+func (d *DB) SetRefreshInterval(minutes int) error {
+	return d.SetSetting(settingKeyRefreshInterval, strconv.Itoa(minutes))
+}
+
+func (d *DB) GetAfterSyncCommands() ([]string, error) {
+	v, err := d.GetSetting(settingKeyAfterSyncCommands)
+	if err != nil || v == "" {
+		return nil, err
+	}
+	return strings.Split(v, "\n"), nil
+}
+
+func (d *DB) SetAfterSyncCommands(cmds []string) error {
+	return d.SetSetting(settingKeyAfterSyncCommands, strings.Join(cmds, "\n"))
 }
 
 func boolToStr(v bool) string {

@@ -35,6 +35,7 @@ type SettingsStrings struct {
 	SectionGeneral      string
 	SectionFolders      string
 	SectionSmartFolders string
+	SectionAfterSync    string
 
 	NewFeedName      string
 	NewFeedURL       string
@@ -73,6 +74,15 @@ type SettingsStrings struct {
 	SortLabel     string
 	PreviewLabel  string
 	ThemeLabel    string
+	RefreshLabel  string
+	RefreshOff    string
+	RefreshFmt    string // "%d min"
+
+	AfterSyncTitle string
+	AfterSyncHint  string
+	AfterSyncAdd   string
+	AfterSyncEdit  string
+	NoAfterSync    string
 }
 
 type CommonStrings struct {
@@ -392,6 +402,7 @@ var en = Strings{
 		SectionGeneral:      "General",
 		SectionFolders:      "Folders",
 		SectionSmartFolders: "Smart folders",
+		SectionAfterSync:    "Auto-commands",
 
 		NewFeedName:      "New feed name:",
 		NewFeedURL:       "New feed URL:",
@@ -427,6 +438,15 @@ var en = Strings{
 		SortLabel:     "Sort",
 		PreviewLabel:  "Preview",
 		ThemeLabel:    "Theme",
+		RefreshLabel:  "Auto-refresh",
+		RefreshOff:    "disabled",
+		RefreshFmt:    "%d min",
+
+		AfterSyncTitle: "After-sync commands",
+		AfterSyncHint:  "a add · d delete · e edit · esc close",
+		AfterSyncAdd:   "New command (query syntax):",
+		AfterSyncEdit:  "Edit command:",
+		NoAfterSync:    "No after-sync commands",
 	},
 	Help: HelpStrings{
 		TitleFmt:        "rdr · help · %s",
@@ -733,6 +753,7 @@ var ru = Strings{
 		SectionGeneral:      "Общие",
 		SectionFolders:      "Папки",
 		SectionSmartFolders: "Умные папки",
+		SectionAfterSync:    "Автокоманды",
 
 		NewFeedName:      "Название ленты:",
 		NewFeedURL:       "URL ленты:",
@@ -768,6 +789,15 @@ var ru = Strings{
 		SortLabel:     "Сортировка",
 		PreviewLabel:  "Превью",
 		ThemeLabel:    "Тема",
+		RefreshLabel:  "Автообновление",
+		RefreshOff:    "отключено",
+		RefreshFmt:    "%d мин",
+
+		AfterSyncTitle: "Автокоманды после синхронизации",
+		AfterSyncHint:  "a добавить · d удалить · e править · esc закрыть",
+		AfterSyncAdd:   "Новая команда (синтаксис запросов):",
+		AfterSyncEdit:  "Редактировать команду:",
+		NoAfterSync:    "Нет автокоманд",
 	},
 	Help: HelpStrings{
 		TitleFmt:        "rdr · справка · %s",
