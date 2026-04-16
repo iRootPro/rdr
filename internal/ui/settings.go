@@ -126,6 +126,8 @@ func renderSettings(m *Model, input string, width, height int) string {
 		renderSmartFoldersSection(&b, m, input)
 	case secAfterSync:
 		renderAfterSyncSection(&b, m, input)
+	case secAI:
+		renderAISection(&b, m, input)
 	default:
 		renderFeedsSection(&b, m, input)
 	}
@@ -144,6 +146,7 @@ func renderSettingsTabs(tr *i18n.Strings, active settingsSection) string {
 		{tr.Settings.SectionFolders, secFolders},
 		{tr.Settings.SectionSmartFolders, secSmartFolders},
 		{tr.Settings.SectionAfterSync, secAfterSync},
+		{tr.Settings.SectionAI, secAI},
 	}
 	sepStyle := lipgloss.NewStyle().Background(colorBG)
 	var cells []string

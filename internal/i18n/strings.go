@@ -56,6 +56,7 @@ type SettingsStrings struct {
 	SectionFolders      string
 	SectionSmartFolders string
 	SectionAfterSync    string
+	SectionAI           string
 
 	NewFeedName      string
 	NewFeedURL       string
@@ -103,6 +104,12 @@ type SettingsStrings struct {
 	AfterSyncAdd   string
 	AfterSyncEdit  string
 	NoAfterSync    string
+
+	AIEndpointLabel string
+	AIKeyLabel      string
+	AIModelLabel    string
+	AIHint          string
+	AINotConfigured string
 }
 
 type CommonStrings struct {
@@ -324,6 +331,11 @@ type ReaderStrings struct {
 	BucketWeek      string
 	BucketMonth     string
 	BucketOlder     string
+
+	Translating string
+	Summarizing string
+	Translated  string
+	Summarized  string
 }
 
 type CommandStrings struct {
@@ -424,6 +436,7 @@ var en = Strings{
 		SectionFolders:      "Folders",
 		SectionSmartFolders: "Smart folders",
 		SectionAfterSync:    "Auto-commands",
+		SectionAI:           "AI",
 
 		NewFeedName:      "New feed name:",
 		NewFeedURL:       "New feed URL:",
@@ -468,6 +481,12 @@ var en = Strings{
 		AfterSyncAdd:   "New command (query syntax):",
 		AfterSyncEdit:  "Edit command:",
 		NoAfterSync:    "No after-sync commands",
+
+		AIEndpointLabel: "AI Endpoint",
+		AIKeyLabel:      "AI API Key",
+		AIModelLabel:    "AI Model",
+		AIHint:          "e edit · tab section · esc close",
+		AINotConfigured: "Not configured — set endpoint and model to enable AI features (translate, summarize)",
 	},
 	Help: HelpStrings{
 		TitleFmt:        "rdr · help · %s",
@@ -672,6 +691,10 @@ var en = Strings{
 		BucketWeek:      "This week",
 		BucketMonth:     "This month",
 		BucketOlder:     "Older",
+		Translating:     "translating…",
+		Summarizing:     "summarizing…",
+		Translated:      "translation ready",
+		Summarized:      "summary ready",
 	},
 	Command: CommandStrings{
 		NoMatching:        "(no matching commands)",
@@ -792,6 +815,7 @@ var ru = Strings{
 		SectionFolders:      "Папки",
 		SectionSmartFolders: "Умные папки",
 		SectionAfterSync:    "Автокоманды",
+		SectionAI:           "AI",
 
 		NewFeedName:      "Название ленты:",
 		NewFeedURL:       "URL ленты:",
@@ -836,6 +860,12 @@ var ru = Strings{
 		AfterSyncAdd:   "Новая команда (синтаксис запросов):",
 		AfterSyncEdit:  "Редактировать команду:",
 		NoAfterSync:    "Нет автокоманд",
+
+		AIEndpointLabel: "AI Endpoint",
+		AIKeyLabel:      "AI API Key",
+		AIModelLabel:    "AI Модель",
+		AIHint:          "e редактировать · tab раздел · esc закрыть",
+		AINotConfigured: "Не настроен — укажите endpoint и модель для перевода и суммаризации статей",
 	},
 	Help: HelpStrings{
 		TitleFmt:        "rdr · справка · %s",
@@ -1040,6 +1070,10 @@ var ru = Strings{
 		BucketWeek:      "На этой неделе",
 		BucketMonth:     "В этом месяце",
 		BucketOlder:     "Ранее",
+		Translating:     "перевод…",
+		Summarizing:     "суммаризация…",
+		Translated:      "перевод готов",
+		Summarized:      "сводка готова",
 	},
 	Command: CommandStrings{
 		NoMatching:        "(совпадений нет)",

@@ -15,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/iRootPro/rdr/internal/ai"
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
 	"github.com/iRootPro/rdr/internal/i18n"
@@ -85,6 +86,7 @@ const (
 	smFolderRename
 	smAfterSyncAdd
 	smAfterSyncEdit
+	smAIEdit
 )
 
 type settingsSection int
@@ -95,6 +97,7 @@ const (
 	secFolders
 	secSmartFolders
 	secAfterSync
+	secAI
 )
 
 // availableLangs is the fixed list of languages the General settings pane
@@ -189,6 +192,7 @@ type Model struct {
 	settingsAfterSyncSel      int
 	catalogSel                int
 	catalogOnboarding         bool
+	settingsAISel             int
 	langPickerSel             int
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
@@ -215,6 +219,7 @@ type Model struct {
 	visualMode   bool
 	visualAnchor int
 	afterSyncCommands []string
+	aiConfig          ai.Config
 	refreshInterval   time.Duration
 	home              string
 
@@ -295,6 +300,7 @@ func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, ref
 		smartFolders:      smartFolders,
 		afterSyncCommands: afterSyncCommands,
 		refreshInterval:   time.Duration(refreshIntervalMinutes) * time.Minute,
+		aiConfig:          loadAIConfig(database),
 		home:              home,
 		settingsInput:     ti,
 		searchInput:       si,
@@ -451,6 +457,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					fetchFullCmd(m.fetcher, m.db, m.readerArt.ID, m.readerArt.URL),
 					tick,
 				)
+			}
+			return m, nil
+		case keyIs(msg, "t"):
+			if m.focus == focusReader && m.readerArt != nil && !m.fetching && m.aiConfig.Enabled() {
+				text := articlePlainText(m.readerArt)
+				if text != "" {
+					tick := m.startBusy(m.tr.Reader.Translating)
+					return m, tea.Batch(translateCmd(m.aiConfig, text, targetLang(m.lang)), tick)
+				}
+			}
+			return m, nil
+		case msg.String() == "ctrl+s":
+			if m.focus == focusReader && m.readerArt != nil && !m.fetching && m.aiConfig.Enabled() {
+				text := articlePlainText(m.readerArt)
+				if text != "" {
+					tick := m.startBusy(m.tr.Reader.Summarizing)
+					return m, tea.Batch(summarizeCmd(m.aiConfig, text, langName(m.lang)), tick)
+				}
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.OpenURL):
@@ -838,6 +862,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case aiResultMsg:
+		m.fetching = false
+		if m.readerArt != nil {
+			// Replace reader content with AI result.
+			m.readerArt.CachedBody = msg.content
+			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
+			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+			m.reader.GotoTop()
+		}
+		label := m.tr.Reader.Translated
+		if msg.kind == "summarize" {
+			label = m.tr.Reader.Summarized
+		}
+		return m, m.showToast(label)
+
+	case aiErrorMsg:
+		m.fetching = false
+		m.err = msg.err
+		return m, nil
+
 	case searchLoadedMsg:
 		m.searchAll = msg.items
 		m.searchSel = 0
@@ -930,7 +975,7 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = focusFeeds
 		return m, nil
 	case key.Matches(msg, m.keys.Tab):
-		m.settingsSection = (m.settingsSection + 1) % 5
+		m.settingsSection = (m.settingsSection + 1) % 6
 		return m, nil
 	case key.Matches(msg, m.keys.Help):
 		m.helpPrev = m.focus
@@ -947,6 +992,8 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.updateSettingsSmartFolders(msg)
 	case secAfterSync:
 		return m.updateSettingsAfterSync(msg)
+	case secAI:
+		return m.updateSettingsAI(msg)
 	default:
 		return m.updateSettingsFeeds(msg)
 	}
@@ -1589,6 +1636,13 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 			m.afterSyncCommands[m.settingsAfterSyncSel] = value
 			_ = m.db.SetAfterSyncCommands(m.afterSyncCommands)
 		}
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, nil
+
+	case smAIEdit:
+		submitAIEdit(&m, value)
 		m.settingsMode = smList
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
