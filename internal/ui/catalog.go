@@ -93,33 +93,36 @@ func catalogByCategory(cat string) []CatalogEntry {
 	return out
 }
 
-// renderCatalog draws the feed discover/catalog overlay.
-func renderCatalog(m Model, width, height int) string {
-	tr := m.tr
+// catalogRow is a pre-built row for the catalog display. Items with
+// EntryIdx >= 0 are selectable feed entries; -1 marks category headers
+// and blank separators.
+type catalogRow struct {
+	Line     string // rendered line
+	EntryIdx int    // index into flat catalog, or -1 for non-selectable
+}
 
+// buildCatalogRows pre-renders all catalog rows with styles applied.
+func buildCatalogRows(m Model) []catalogRow {
 	catStyle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
 	nameStyle := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
 	checkOn := lipgloss.NewStyle().Foreground(colorGreen).Background(colorBG)
 	checkOff := lipgloss.NewStyle().Foreground(colorBorder).Background(colorBG)
-	hintStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true)
 
-	// Build a set of already-subscribed URLs.
 	subscribed := map[string]bool{}
 	for _, f := range m.feeds {
 		subscribed[f.URL] = true
 	}
 
-	var b strings.Builder
-	b.WriteString(hintStyle.Render(tr.Catalog.Subtitle))
-	b.WriteString("\n\n")
-
+	var rows []catalogRow
 	idx := 0
 	for ci, cat := range catalogCategories() {
 		if ci > 0 {
-			b.WriteString("\n")
+			rows = append(rows, catalogRow{Line: "", EntryIdx: -1})
 		}
-		b.WriteString(catStyle.Render("  " + cat))
-		b.WriteString("\n")
+		rows = append(rows, catalogRow{
+			Line:     catStyle.Render("  " + cat),
+			EntryIdx: -1,
+		})
 		for _, entry := range catalogByCategory(cat) {
 			prefix := "    "
 			style := nameStyle
@@ -133,16 +136,65 @@ func renderCatalog(m Model, width, height int) string {
 			}
 			icon := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).
 				Render(feedIcon(entry.URL, entry.Name))
-			b.WriteString(prefix + check + " " + icon + " " + style.Render(entry.Name))
-			b.WriteString("\n")
+			rows = append(rows, catalogRow{
+				Line:     prefix + check + " " + icon + " " + style.Render(entry.Name),
+				EntryIdx: idx,
+			})
 			idx++
 		}
+	}
+	return rows
+}
+
+// renderCatalog draws the feed discover/catalog overlay with scroll.
+func renderCatalog(m Model, width, height int) string {
+	tr := m.tr
+	hintStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true)
+
+	allRows := buildCatalogRows(m)
+
+	// Find which row index contains the selected entry.
+	selRow := 0
+	for i, r := range allRows {
+		if r.EntryIdx == m.catalogSel {
+			selRow = i
+			break
+		}
+	}
+
+	// Visible area: height minus subtitle(2) and hint(2).
+	visRows := height - 4
+	if visRows < 5 {
+		visRows = 5
+	}
+
+	// Scroll window around selRow.
+	start := selRow - visRows/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + visRows
+	if end > len(allRows) {
+		end = len(allRows)
+		start = end - visRows
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(hintStyle.Render(tr.Catalog.Subtitle))
+	b.WriteString("\n\n")
+
+	for i := start; i < end; i++ {
+		b.WriteString(allRows[i].Line)
+		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
 	b.WriteString(hintStyle.Render(tr.Catalog.Hint))
 
-	title := "\U000f046b " + tr.Catalog.Title // 󰑫
+	title := "\U000f046b " + tr.Catalog.Title
 	return framePaneWithTitle(b.String(), title, true, width, height)
 }
 
