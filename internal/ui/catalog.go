@@ -246,6 +246,10 @@ func (m Model) updateCatalog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Back), key.Matches(msg, m.keys.Quit) && msg.String() == "ctrl+c":
 		m.focus = focusFeeds
+		if len(m.feeds) > 0 {
+			tick := m.startBusy(m.tr.Status.Fetching)
+			return m, tea.Batch(loadFeedsCmd(m.db), fetchAllCmd(m.fetcher), tick)
+		}
 		return m, nil
 	case key.Matches(msg, m.keys.Down):
 		if m.catalogSel < total-1 {
