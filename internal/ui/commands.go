@@ -147,6 +147,7 @@ func buildCommandCompletions(tr *i18n.Strings) []commandSuggestion {
 		{"expandall", c.HelpExpandAll},
 		{"zen", c.HelpZen},
 		{"help", c.HelpHelp},
+		{"discover", c.HelpDiscover},
 		{"settings", c.HelpSettings},
 		{"search", c.HelpSearch},
 		{"quit", c.HelpQuit},
@@ -470,6 +471,10 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 	case "help":
 		m.helpPrev = m.focus
 		m.focus = focusHelp
+		return m, nil
+	case "discover", "catalog":
+		m.focus = focusCatalog
+		m.catalogSel = 0
 		return m, nil
 
 	case "settings":

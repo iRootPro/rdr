@@ -27,6 +27,15 @@ type Strings struct {
 	Errors   ErrorsStrings
 	Common   CommonStrings
 	Sort     SortStrings
+	Catalog  CatalogStrings
+}
+
+type CatalogStrings struct {
+	Title    string
+	Subtitle string
+	Hint     string
+	Added    string
+	Crumb    string
 }
 
 type SettingsStrings struct {
@@ -330,6 +339,7 @@ type CommandStrings struct {
 	HelpExpandAll string
 	HelpZen      string
 	HelpHelp     string
+	HelpDiscover string
 	HelpSettings string
 	HelpSearch   string
 	HelpQuit     string
@@ -676,6 +686,7 @@ var en = Strings{
 		HelpExpandAll:     "Expand all feed categories",
 		HelpZen:           "Toggle zen mode",
 		HelpHelp:          "Toggle help overlay",
+		HelpDiscover:      "Browse feed catalog",
 		HelpSettings:      "Open feed settings",
 		HelpSearch:        "Open search picker",
 		HelpQuit:          "Exit rdr",
@@ -743,6 +754,13 @@ var en = Strings{
 		DateAsc:   "date ↑",
 		TitleAsc:  "title ↑",
 		TitleDesc: "title ↓",
+	},
+	Catalog: CatalogStrings{
+		Title:    "Discover Feeds",
+		Subtitle: "Browse curated RSS feeds and subscribe with Enter",
+		Hint:     "j/k navigate · enter subscribe · esc close",
+		Added:    "subscribed",
+		Crumb:    "discover",
 	},
 }
 
@@ -1027,6 +1045,7 @@ var ru = Strings{
 		HelpExpandAll:     "Развернуть все категории лент",
 		HelpZen:           "Переключить zen-режим",
 		HelpHelp:          "Переключить окно справки",
+		HelpDiscover:      "Каталог RSS-лент",
 		HelpSettings:      "Открыть настройки",
 		HelpSearch:        "Открыть поиск",
 		HelpQuit:          "Выйти из rdr",
@@ -1094,6 +1113,13 @@ var ru = Strings{
 		DateAsc:   "дата ↑",
 		TitleAsc:  "заголовок ↑",
 		TitleDesc: "заголовок ↓",
+	},
+	Catalog: CatalogStrings{
+		Title:    "Каталог лент",
+		Subtitle: "Обзор RSS-лент по категориям. Enter — подписаться",
+		Hint:     "j/k навигация · enter подписаться · esc закрыть",
+		Added:    "подписан",
+		Crumb:    "каталог",
 	},
 }
 
