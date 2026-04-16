@@ -1782,7 +1782,8 @@ func (m Model) View() string {
 	}
 
 	if m.focus == focusCatalog {
-		body := renderCatalog(m, m.width, m.height-1-helpH)
+		catH := m.height - 4 - helpH
+		body := renderCatalog(m, m.width, catH)
 		status := renderPowerline([]segment{appSegment(), {Text: m.tr.Catalog.Crumb, FG: colorText, BG: colorAltBG}}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}

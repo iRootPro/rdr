@@ -96,18 +96,12 @@ func catalogByCategory(cat string) []CatalogEntry {
 // renderCatalog draws the feed discover/catalog overlay.
 func renderCatalog(m Model, width, height int) string {
 	tr := m.tr
-	var b strings.Builder
-	b.WriteString(lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true).
-		Render(tr.Catalog.Title))
-	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true).
-		Render(tr.Catalog.Subtitle))
-	b.WriteString("\n\n")
 
 	catStyle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
 	nameStyle := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
-	urlStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
-	addedStyle := lipgloss.NewStyle().Foreground(colorGreen).Background(colorBG)
+	checkOn := lipgloss.NewStyle().Foreground(colorGreen).Background(colorBG)
+	checkOff := lipgloss.NewStyle().Foreground(colorBorder).Background(colorBG)
+	hintStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true)
 
 	// Build a set of already-subscribed URLs.
 	subscribed := map[string]bool{}
@@ -115,9 +109,16 @@ func renderCatalog(m Model, width, height int) string {
 		subscribed[f.URL] = true
 	}
 
+	var b strings.Builder
+	b.WriteString(hintStyle.Render(tr.Catalog.Subtitle))
+	b.WriteString("\n\n")
+
 	idx := 0
-	for _, cat := range catalogCategories() {
-		b.WriteString(catStyle.Render("▸ " + cat))
+	for ci, cat := range catalogCategories() {
+		if ci > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(catStyle.Render("  " + cat))
 		b.WriteString("\n")
 		for _, entry := range catalogByCategory(cat) {
 			prefix := "    "
@@ -126,24 +127,23 @@ func renderCatalog(m Model, width, height int) string {
 				prefix = "  › "
 				style = itemSelected
 			}
-			line := prefix + style.Render(entry.Name)
+			check := checkOff.Render("○")
 			if subscribed[entry.URL] {
-				line += "  " + addedStyle.Render("✓")
-			} else {
-				line += "  " + urlStyle.Render(entry.URL)
+				check = checkOn.Render("●")
 			}
-			b.WriteString(line)
+			icon := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).
+				Render(feedIcon(entry.URL, entry.Name))
+			b.WriteString(prefix + check + " " + icon + " " + style.Render(entry.Name))
 			b.WriteString("\n")
 			idx++
 		}
-		b.WriteString("\n")
 	}
 
-	b.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true).
-		Render(tr.Catalog.Hint))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render(tr.Catalog.Hint))
 
-	content := fillBackground(b.String(), width-4)
-	return paneActive.Width(width - 2).Height(height - 2).Render(content)
+	title := "\U000f046b " + tr.Catalog.Title // 󰑫
+	return framePaneWithTitle(b.String(), title, true, width, height)
 }
 
 // catalogFlatIndex returns the CatalogEntry at the given flat index
@@ -166,11 +166,6 @@ func catalogFlatIndex(idx int) *CatalogEntry {
 // catalogLen returns the total number of entries in the catalog.
 func catalogLen() int {
 	return len(catalog)
-}
-
-// onboardingNeeded returns true when the DB has no feeds — first launch.
-func onboardingNeeded(m *Model) bool {
-	return len(m.feeds) == 0
 }
 
 // updateCatalog handles keystrokes in the catalog overlay.
