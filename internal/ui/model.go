@@ -63,6 +63,7 @@ const (
 	focusCommand
 	focusLinks
 	focusHelp
+	focusCatalog
 )
 
 type settingsMode int
@@ -185,6 +186,7 @@ type Model struct {
 	settingsFolderSel         int
 	settingsSmartFolderSel    int
 	settingsAfterSyncSel      int
+	catalogSel                int
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
 	pendingName               string
@@ -358,6 +360,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.focus == focusHelp {
 			return m.updateHelp(msg)
+		}
+		if m.focus == focusCatalog {
+			return m.updateCatalog(msg)
 		}
 		// Digit prefixes accumulate vim-style counts for the next movement
 		// key. Only consumes bare digits (no modifier). 0 alone is ignored
@@ -658,6 +663,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selEntry = 0
 			}
 			return m, m.loadCurrentCmd()
+		}
+		// Onboarding: open catalog on first launch (no feeds).
+		if len(m.feeds) == 0 && m.focus == focusFeeds {
+			m.focus = focusCatalog
+			m.catalogSel = 0
 		}
 		return m, nil
 
@@ -1768,6 +1778,12 @@ func (m Model) View() string {
 		body := renderHelpScreen(m, m.width, m.height-1-helpH)
 		label := fmt.Sprintf(m.tr.Status.HelpCrumbFmt, focusLabel(m.helpPrev, m.tr))
 		status := renderPowerline([]segment{appSegment(), {Text: label, FG: colorText, BG: colorAltBG}}, m.width)
+		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
+	}
+
+	if m.focus == focusCatalog {
+		body := renderCatalog(m, m.width, m.height-1-helpH)
+		status := renderPowerline([]segment{appSegment(), {Text: m.tr.Catalog.Crumb, FG: colorText, BG: colorAltBG}}, m.width)
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
