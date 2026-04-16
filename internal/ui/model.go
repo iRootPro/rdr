@@ -398,7 +398,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.switchFilter(filterStarred)
 		case key.Matches(msg, m.keys.NextUnread):
 			return m.jumpToNextUnread()
-		case msg.String() == "p":
+		case keyIs(msg, "p"):
 			if m.focus == focusFeeds || m.focus == focusArticles {
 				m.showPreview = !m.showPreview
 				if m.db != nil {
@@ -411,7 +411,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.showToast(label)
 			}
 			return m, nil
-		case msg.String() == "v":
+		case keyIs(msg, "v"):
 			if m.focus == focusArticles && len(m.articles) > 0 && !m.visualMode {
 				m.visualMode = true
 				m.visualAnchor = m.selArt
@@ -950,12 +950,12 @@ func (m Model) updateSettingsFeeds(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsSel = len(m.feeds) - 1
 		}
 		return m, nil
-	case msg.String() == "a":
+	case keyIs(msg, "a"):
 		m.settingsMode = smAddName
 		m.settingsInput.SetValue("")
 		m.settingsInput.Focus()
 		return m, textinput.Blink
-	case msg.String() == "d":
+	case keyIs(msg, "d"):
 		if len(m.feeds) == 0 {
 			return m, nil
 		}
@@ -968,7 +968,7 @@ func (m Model) updateSettingsFeeds(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsSel--
 		}
 		return m, loadFeedsCmd(m.db)
-	case msg.String() == "e":
+	case keyIs(msg, "e"):
 		if len(m.feeds) == 0 {
 			return m, nil
 		}
@@ -977,19 +977,19 @@ func (m Model) updateSettingsFeeds(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settingsInput.CursorEnd()
 		m.settingsInput.Focus()
 		return m, textinput.Blink
-	case msg.String() == "c":
+	case keyIs(msg, "c"):
 		if len(m.feeds) == 0 {
 			return m, nil
 		}
 		m.settingsMode = smCategoryPicker
 		m.settingsCategoryPickerSel = initialCategoryPickerSel(&m)
 		return m, nil
-	case msg.String() == "i":
+	case keyIs(msg, "i"):
 		m.settingsMode = smImport
 		m.settingsInput.SetValue("")
 		m.settingsInput.Focus()
 		return m, textinput.Blink
-	case msg.String() == "E":
+	case keyIs(msg, "E"):
 		m.settingsMode = smExport
 		m.settingsInput.SetValue("")
 		m.settingsInput.Focus()
@@ -1022,7 +1022,7 @@ func (m Model) updateSettingsFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsFolderSel = len(cats) - 1
 		}
 		return m, nil
-	case msg.String() == "e":
+	case keyIs(msg, "e"):
 		if len(cats) == 0 {
 			return m, nil
 		}
@@ -1031,7 +1031,7 @@ func (m Model) updateSettingsFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settingsInput.CursorEnd()
 		m.settingsInput.Focus()
 		return m, textinput.Blink
-	case msg.String() == "d":
+	case keyIs(msg, "d"):
 		if len(cats) == 0 {
 			return m, nil
 		}
@@ -1290,12 +1290,12 @@ func (m Model) updateSettingsSmartFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsSmartFolderSel = len(m.smartFolders) - 1
 		}
 		return m, nil
-	case msg.String() == "a":
+	case keyIs(msg, "a"):
 		m.settingsMode = smSmartFolderAddName
 		m.settingsInput.SetValue("")
 		m.settingsInput.Focus()
 		return m, textinput.Blink
-	case msg.String() == "d":
+	case keyIs(msg, "d"):
 		if len(m.smartFolders) == 0 {
 			return m, nil
 		}
@@ -1305,7 +1305,7 @@ func (m Model) updateSettingsSmartFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, loadSmartFoldersCmd(m.db)
-	case msg.String() == "e":
+	case keyIs(msg, "e"):
 		if len(m.smartFolders) == 0 {
 			return m, nil
 		}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/iRootPro/rdr/internal/i18n"
 )
@@ -46,43 +47,77 @@ type keyMap struct {
 
 func defaultKeys(tr *i18n.Strings) keyMap {
 	k := tr.Keys
+	// Russian layout equivalents (QWERTY → ЙЦУКЕН):
+	// q→й w→ц e→у r→к t→е y→н u→г i→ш o→щ p→з
+	// a→ф s→ы d→в f→а g→п h→р j→о k→л l→д
+	// z→я x→ч c→с v→м b→и n→т m→ь
 	return keyMap{
-		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", k.Quit)),
-		Up:         key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", k.Up)),
-		Down:       key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", k.Down)),
-		Left:       key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h", k.Back)),
-		Right:      key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l", k.Forward)),
+		Quit:       key.NewBinding(key.WithKeys("q", "й", "ctrl+c"), key.WithHelp("q", k.Quit)),
+		Up:         key.NewBinding(key.WithKeys("k", "л", "up"), key.WithHelp("k", k.Up)),
+		Down:       key.NewBinding(key.WithKeys("j", "о", "down"), key.WithHelp("j", k.Down)),
+		Left:       key.NewBinding(key.WithKeys("h", "р", "left"), key.WithHelp("h", k.Back)),
+		Right:      key.NewBinding(key.WithKeys("l", "д", "right"), key.WithHelp("l", k.Forward)),
 		Tab:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", k.SwitchPane)),
-		Top:        key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", k.Top)),
-		Bottom:     key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", k.Bottom)),
+		Top:        key.NewBinding(key.WithKeys("g", "п", "home"), key.WithHelp("g", k.Top)),
+		Bottom:     key.NewBinding(key.WithKeys("G", "П", "end"), key.WithHelp("G", k.Bottom)),
 		PageUp:     key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", k.PageUp)),
 		PageDown:   key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", k.PageDown)),
 		Enter:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", k.Open)),
 		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", k.Esc)),
-		RefreshOne: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", k.RefreshOne)),
-		RefreshAll: key.NewBinding(key.WithKeys("R"), key.WithHelp("R", k.RefreshAll)),
-		OpenURL:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", k.OpenBrowser)),
-		FullArticle: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", k.FullArticle)),
-		Settings:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", k.Settings)),
+		RefreshOne: key.NewBinding(key.WithKeys("r", "к"), key.WithHelp("r", k.RefreshOne)),
+		RefreshAll: key.NewBinding(key.WithKeys("R", "К"), key.WithHelp("R", k.RefreshAll)),
+		OpenURL:     key.NewBinding(key.WithKeys("o", "щ"), key.WithHelp("o", k.OpenBrowser)),
+		FullArticle: key.NewBinding(key.WithKeys("f", "а"), key.WithHelp("f", k.FullArticle)),
+		Settings:    key.NewBinding(key.WithKeys("s", "ы"), key.WithHelp("s", k.Settings)),
 		Search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", k.Search)),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", k.Help)),
 
-		NextUnread:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", k.NextUnread)),
-		Zen:           key.NewBinding(key.WithKeys("z"), key.WithHelp("z", k.Zen)),
+		NextUnread:    key.NewBinding(key.WithKeys("n", "т"), key.WithHelp("n", k.NextUnread)),
+		Zen:           key.NewBinding(key.WithKeys("z", "я"), key.WithHelp("z", k.Zen)),
 		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", k.Command)),
-		Star:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", k.ToggleStar)),
-		FilterAll:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", k.FilterAll)),
-		FilterUnread:  key.NewBinding(key.WithKeys("u"), key.WithHelp("u", k.FilterUnread)),
-		FilterStarred: key.NewBinding(key.WithKeys("S"), key.WithHelp("S", k.FilterStarred)),
-		NextArticle:   key.NewBinding(key.WithKeys("J"), key.WithHelp("J", k.NextArticle)),
-		PrevArticle:   key.NewBinding(key.WithKeys("K"), key.WithHelp("K", k.PrevArticle)),
-		LinkPicker:    key.NewBinding(key.WithKeys("L"), key.WithHelp("L", k.LinkPicker)),
-		ToggleRead:    key.NewBinding(key.WithKeys("x"), key.WithHelp("x", k.ToggleRead)),
-		MarkAllRead:   key.NewBinding(key.WithKeys("X"), key.WithHelp("X", k.MarkAllRead)),
-		YankURL:       key.NewBinding(key.WithKeys("y"), key.WithHelp("y", k.YankURL)),
-		YankMarkdown:  key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", k.YankMarkdown)),
+		Star:          key.NewBinding(key.WithKeys("m", "ь"), key.WithHelp("m", k.ToggleStar)),
+		FilterAll:     key.NewBinding(key.WithKeys("a", "ф"), key.WithHelp("a", k.FilterAll)),
+		FilterUnread:  key.NewBinding(key.WithKeys("u", "г"), key.WithHelp("u", k.FilterUnread)),
+		FilterStarred: key.NewBinding(key.WithKeys("S", "Ы"), key.WithHelp("S", k.FilterStarred)),
+		NextArticle:   key.NewBinding(key.WithKeys("J", "О"), key.WithHelp("J", k.NextArticle)),
+		PrevArticle:   key.NewBinding(key.WithKeys("K", "Л"), key.WithHelp("K", k.PrevArticle)),
+		LinkPicker:    key.NewBinding(key.WithKeys("L", "Д"), key.WithHelp("L", k.LinkPicker)),
+		ToggleRead:    key.NewBinding(key.WithKeys("x", "ч"), key.WithHelp("x", k.ToggleRead)),
+		MarkAllRead:   key.NewBinding(key.WithKeys("X", "Ч"), key.WithHelp("X", k.MarkAllRead)),
+		YankURL:       key.NewBinding(key.WithKeys("y", "н"), key.WithHelp("y", k.YankURL)),
+		YankMarkdown:  key.NewBinding(key.WithKeys("Y", "Н"), key.WithHelp("Y", k.YankMarkdown)),
 		ToggleFold:    key.NewBinding(key.WithKeys(" "), key.WithHelp("space", k.ToggleFold)),
 	}
+}
+
+// ruMap maps Russian ЙЦУКЕН keys to their QWERTY equivalents.
+var ruMap = map[string]string{
+	"й": "q", "ц": "w", "у": "e", "к": "r", "е": "t", "н": "y", "г": "u", "ш": "i", "щ": "o", "з": "p",
+	"ф": "a", "ы": "s", "в": "d", "а": "f", "п": "g", "р": "h", "о": "j", "л": "k", "д": "l",
+	"я": "z", "ч": "x", "с": "c", "м": "v", "и": "b", "т": "n", "ь": "m",
+	"Й": "Q", "Ц": "W", "У": "E", "К": "R", "Е": "T", "Н": "Y", "Г": "U", "Ш": "I", "Щ": "O", "З": "P",
+	"Ф": "A", "Ы": "S", "В": "D", "А": "F", "П": "G", "Р": "H", "О": "J", "Л": "K", "Д": "L",
+	"Я": "Z", "Ч": "X", "С": "C", "М": "V", "И": "B", "Т": "N", "Ь": "M",
+}
+
+// keyIs checks if a key message matches one of the given keys, accounting
+// for the Russian keyboard layout automatically.
+func keyIs(msg tea.KeyMsg, keys ...string) bool {
+	s := msg.String()
+	for _, k := range keys {
+		if s == k {
+			return true
+		}
+	}
+	// Check Russian equivalent.
+	if en, ok := ruMap[s]; ok {
+		for _, k := range keys {
+			if en == k {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ShortHelp / FullHelp from bubbles keymap interface are no longer used;
