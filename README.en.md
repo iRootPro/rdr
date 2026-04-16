@@ -27,17 +27,30 @@ Vim-style navigation, full article reading, smart folders, query language search
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap iRootPro/tap
+brew install rdr
+```
+
+### Go
+
 ```bash
 go install github.com/iRootPro/rdr@latest
 ```
 
-Or from source:
+### From source
 
 ```bash
 git clone https://github.com/iRootPro/rdr.git
 cd rdr
 go build -o rdr .
 ```
+
+### Binaries
+
+Pre-built binaries for macOS (arm64, amd64) and Linux (arm64, amd64) are available on the [Releases](https://github.com/iRootPro/rdr/releases) page.
 
 ### Requirements
 
