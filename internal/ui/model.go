@@ -2281,6 +2281,10 @@ func (m Model) toggleReadOnCurrent() (tea.Model, tea.Cmd) {
 		a := m.articles[m.selArt]
 		id = a.ID
 		makeRead = a.ReadAt == nil
+		// Move cursor down after toggling.
+		if m.selArt < len(m.articles)-1 {
+			m.selArt++
+		}
 	default:
 		return m, nil
 	}
