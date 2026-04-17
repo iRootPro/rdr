@@ -1907,7 +1907,17 @@ func (m Model) View() string {
 				{Text: m.spin.View() + " " + m.status, FG: colorText, BG: colorAltBG},
 			}, m.width)
 		} else {
-			status = renderPowerline(readerSegments(feedName, m.readerArt.Title, titleBudget), m.width)
+			scrollPct := -1
+			if total := m.reader.TotalLineCount() - m.reader.Height; total > 0 {
+				scrollPct = m.reader.YOffset * 100 / total
+				if scrollPct > 100 {
+					scrollPct = 100
+				}
+			} else if m.reader.TotalLineCount() > 0 {
+				// Content fits on screen — show 100%.
+				scrollPct = 100
+			}
+			status = renderPowerline(readerSegments(feedName, m.readerArt.Title, titleBudget, scrollPct), m.width)
 		}
 		if m.err != nil {
 			status = paintLineBG(status+"  "+errStyle.Render("! "+m.err.Error()), m.width)
