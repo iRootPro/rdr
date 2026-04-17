@@ -17,6 +17,9 @@ import (
 	"github.com/iRootPro/rdr/internal/rlog"
 )
 
+// maxPromptLen limits the text sent to AI to avoid timeouts and token limits.
+const maxPromptLen = 8000
+
 func logAI(provider, msg string) {
 	rlog.Log("ai/"+provider, msg)
 }
@@ -158,6 +161,8 @@ func completeClaude(ctx context.Context, cfg Config, system, user string) (strin
 		args = append(args, "--model", cfg.Model)
 	}
 
+	rlog.Logf("ai/claude", "exec: %s %v | prompt: %d chars", claudePath, args, len(prompt))
+
 	cmd := exec.CommandContext(ctx, claudePath, args...)
 	cmd.Stdin = strings.NewReader(prompt)
 
@@ -180,13 +185,20 @@ func completeClaude(ctx context.Context, cfg Config, system, user string) (strin
 	return out, nil
 }
 
+func trimText(text string) string {
+	if len(text) > maxPromptLen {
+		return text[:maxPromptLen] + "\n\n[truncated]"
+	}
+	return text
+}
+
 // Translate sends the text for translation to the target language.
 func Translate(ctx context.Context, cfg Config, text, targetLang string) (string, error) {
 	system := fmt.Sprintf(
 		"You are a translator. Translate the following text to %s. "+
 			"Preserve formatting, paragraphs and markdown. "+
 			"Output only the translation, nothing else.", targetLang)
-	return Complete(ctx, cfg, system, text)
+	return Complete(ctx, cfg, system, trimText(text))
 }
 
 // Summarize sends the text for summarization.
@@ -195,5 +207,5 @@ func Summarize(ctx context.Context, cfg Config, text, lang string) (string, erro
 		"Summarize the following article in %s. "+
 			"Write 3-5 key points as a bullet list. "+
 			"Be concise. Output only the summary.", lang)
-	return Complete(ctx, cfg, system, text)
+	return Complete(ctx, cfg, system, trimText(text))
 }
