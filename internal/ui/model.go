@@ -17,6 +17,7 @@ import (
 
 	"github.com/iRootPro/rdr/internal/ai"
 	"github.com/iRootPro/rdr/internal/db"
+	"github.com/iRootPro/rdr/internal/rlog"
 	"github.com/iRootPro/rdr/internal/feed"
 	"github.com/iRootPro/rdr/internal/i18n"
 )
@@ -66,6 +67,7 @@ const (
 	focusHelp
 	focusCatalog
 	focusLangPicker
+	focusLog
 )
 
 type settingsMode int
@@ -193,6 +195,7 @@ type Model struct {
 	catalogSel                int
 	catalogOnboarding         bool
 	settingsAISel             int
+	logContent                string
 	langPickerSel             int
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
@@ -259,6 +262,7 @@ type Model struct {
 }
 
 func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, refreshIntervalMinutes int, home string, lang i18n.Lang, showImages bool, sortField string, sortReverse bool, showPreview bool, themeName string) Model {
+	rlog.Init(home)
 	smartFolders, _ := database.ListSmartFolders()
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -300,8 +304,8 @@ func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, ref
 		smartFolders:      smartFolders,
 		afterSyncCommands: afterSyncCommands,
 		refreshInterval:   time.Duration(refreshIntervalMinutes) * time.Minute,
-		aiConfig:          loadAIConfig(database),
-		home:              home,
+		aiConfig: loadAIConfig(database),
+		home: home,
 		settingsInput:     ti,
 		searchInput:       si,
 		commandInput:      ci,
@@ -375,6 +379,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.focus == focusLangPicker {
 			return m.updateLangPicker(msg)
+		}
+		if m.focus == focusLog {
+			switch {
+			case key.Matches(msg, m.keys.Back), key.Matches(msg, m.keys.Quit):
+				m.focus = focusFeeds
+			}
+			return m, nil
 		}
 		// Digit prefixes accumulate vim-style counts for the next movement
 		// key. Only consumes bare digits (no modifier). 0 alone is ignored
@@ -460,23 +471,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case keyIs(msg, "t"):
-			if m.focus == focusReader && m.readerArt != nil && !m.fetching && m.aiConfig.Enabled() {
-				text := articlePlainText(m.readerArt)
-				if text != "" {
-					tick := m.startBusy(m.tr.Reader.Translating)
-					return m, tea.Batch(translateCmd(m.aiConfig, text, targetLang(m.lang)), tick)
-				}
+			if m.focus != focusReader || m.readerArt == nil || m.fetching {
+				return m, nil
 			}
-			return m, nil
+			if !m.aiConfig.Enabled() {
+				return m, m.showToast(m.tr.Settings.AINotConfigured)
+			}
+			text := articlePlainText(m.readerArt)
+			if text == "" {
+				rlog.Log("ai", "translate: no text in article")
+				return m, m.showToast("no text")
+			}
+			rlog.Logf("ai", "translate: %d chars, provider=%s", len(text), m.aiConfig.Provider)
+			tick := m.startBusy(m.tr.Reader.Translating)
+			return m, tea.Batch(translateCmd(m.aiConfig, text, targetLang(m.lang)), tick)
 		case msg.String() == "ctrl+s":
-			if m.focus == focusReader && m.readerArt != nil && !m.fetching && m.aiConfig.Enabled() {
-				text := articlePlainText(m.readerArt)
-				if text != "" {
-					tick := m.startBusy(m.tr.Reader.Summarizing)
-					return m, tea.Batch(summarizeCmd(m.aiConfig, text, langName(m.lang)), tick)
-				}
+			if m.focus != focusReader || m.readerArt == nil || m.fetching {
+				return m, nil
 			}
-			return m, nil
+			if !m.aiConfig.Enabled() {
+				return m, m.showToast(m.tr.Settings.AINotConfigured)
+			}
+			text := articlePlainText(m.readerArt)
+			if text == "" {
+				return m, m.showToast("no text")
+			}
+			tick := m.startBusy(m.tr.Reader.Summarizing)
+			return m, tea.Batch(summarizeCmd(m.aiConfig, text, langName(m.lang)), tick)
 		case key.Matches(msg, m.keys.OpenURL):
 			var url string
 			switch m.focus {
@@ -864,9 +885,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case aiResultMsg:
 		m.fetching = false
-		if m.readerArt != nil {
-			// Replace reader content with AI result.
-			m.readerArt.CachedBody = msg.content
+		content := strings.TrimSpace(msg.content)
+		if m.readerArt != nil && content != "" {
+			header := "## " + m.tr.Reader.Translated + "\n\n"
+			if msg.kind == "summarize" {
+				header = "## " + m.tr.Reader.Summarized + "\n\n"
+			}
+			m.readerArt.CachedBody = header + content
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
 			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
@@ -876,12 +901,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.kind == "summarize" {
 			label = m.tr.Reader.Summarized
 		}
+		if content == "" {
+			label += " (empty)"
+		}
 		return m, m.showToast(label)
 
 	case aiErrorMsg:
 		m.fetching = false
-		m.err = msg.err
-		return m, nil
+		rlog.Error("ai", msg.err)
+		return m, m.showToast("AI error: " + msg.err.Error())
 
 	case searchLoadedMsg:
 		m.searchAll = msg.items
@@ -1841,6 +1869,14 @@ func (m Model) View() string {
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
+	if m.focus == focusLog {
+		content := fillBackground(m.logContent, m.width-4)
+		body := paneActive.Width(m.width - 2).Height(m.height - 3).Render(content)
+		status := renderPowerline([]segment{appSegment(), {Text: "Log", FG: colorText, BG: colorAltBG}}, m.width)
+		hint := paintLineBG("  esc close", m.width)
+		return lipgloss.JoinVertical(lipgloss.Top, body, status, hint)
+	}
+
 	if m.focus == focusLangPicker {
 		body := renderLangPicker(m, m.width, m.height-2)
 		return body
@@ -1937,10 +1973,11 @@ func (m Model) View() string {
 	}
 
 	if m.focus == focusCommand {
-		cmdLine := renderPowerline([]segment{
-			appSegment(),
-			{Text: m.commandInput.View(), FG: colorText, BG: colorAltBG},
-		}, m.width)
+		cmdLine := paintLineBG(
+			lipgloss.NewStyle().Background(colorAltBG).Foreground(colorText).
+				Padding(0, 1).Render(m.commandInput.View()),
+			m.width,
+		)
 		return lipgloss.JoinVertical(lipgloss.Top, row, popup, cmdLine, helpView)
 	}
 

@@ -9,10 +9,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/iRootPro/rdr/internal/rlog"
 )
+
+func logAI(provider, msg string) {
+	rlog.Log("ai/"+provider, msg)
+}
 
 // Provider selects the AI backend.
 const (
@@ -107,15 +114,20 @@ func completeOpenAI(ctx context.Context, cfg Config, system, user string) (strin
 
 	var result chatResponse
 	if err := json.Unmarshal(data, &result); err != nil {
+		logAI("openai", "parse error: "+string(data))
 		return "", fmt.Errorf("AI response parse error: %w", err)
 	}
 	if result.Error != nil {
+		logAI("openai", "api error: "+result.Error.Message)
 		return "", fmt.Errorf("AI error: %s", result.Error.Message)
 	}
 	if len(result.Choices) == 0 {
+		logAI("openai", "no choices returned")
 		return "", fmt.Errorf("AI returned no choices")
 	}
-	return result.Choices[0].Message.Content, nil
+	content := result.Choices[0].Message.Content
+	logAI("openai", fmt.Sprintf("ok, %d chars", len(content)))
+	return content, nil
 }
 
 // completeClaude calls the Claude Code CLI via subprocess.
@@ -123,7 +135,21 @@ func completeOpenAI(ctx context.Context, cfg Config, system, user string) (strin
 func completeClaude(ctx context.Context, cfg Config, system, user string) (string, error) {
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {
-		return "", fmt.Errorf("claude CLI not found: install from https://docs.anthropic.com/en/docs/claude-code")
+		// Fallback to common paths.
+		for _, p := range []string{
+			os.ExpandEnv("$HOME/.local/bin/claude"),
+			"/usr/local/bin/claude",
+			"/opt/homebrew/bin/claude",
+		} {
+			if _, serr := os.Stat(p); serr == nil {
+				claudePath = p
+				err = nil
+				break
+			}
+		}
+		if err != nil {
+			return "", fmt.Errorf("claude CLI not found")
+		}
 	}
 
 	prompt := system + "\n\n" + user
@@ -135,11 +161,23 @@ func completeClaude(ctx context.Context, cfg Config, system, user string) (strin
 	cmd := exec.CommandContext(ctx, claudePath, args...)
 	cmd.Stdin = strings.NewReader(prompt)
 
-	out, err := cmd.Output()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+
 	if err != nil {
-		return "", fmt.Errorf("claude CLI error: %w", err)
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" {
+			detail = err.Error()
+		}
+		logAI("claude", fmt.Sprintf("error: %s | stderr: %s", err, detail))
+		return "", fmt.Errorf("claude: %s", detail)
 	}
-	return strings.TrimSpace(string(out)), nil
+	out := strings.TrimSpace(stdout.String())
+	logAI("claude", fmt.Sprintf("ok, %d chars", len(out)))
+	return out, nil
 }
 
 // Translate sends the text for translation to the target language.

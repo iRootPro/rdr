@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/rdr/internal/db"
+	"github.com/iRootPro/rdr/internal/rlog"
 	"github.com/iRootPro/rdr/internal/feed"
 	"github.com/iRootPro/rdr/internal/i18n"
 )
@@ -148,6 +149,7 @@ func buildCommandCompletions(tr *i18n.Strings) []commandSuggestion {
 		{"zen", c.HelpZen},
 		{"help", c.HelpHelp},
 		{"discover", c.HelpDiscover},
+		{"log", "Application log"},
 		{"settings", c.HelpSettings},
 		{"search", c.HelpSearch},
 		{"quit", c.HelpQuit},
@@ -475,6 +477,16 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 	case "discover", "catalog":
 		m.focus = focusCatalog
 		m.catalogSel = 0
+		return m, nil
+	case "log":
+		logPath := rlog.LogPath()
+		data, err := os.ReadFile(logPath)
+		if err != nil {
+			m.logContent = "No log file: " + logPath
+		} else {
+			m.logContent = string(data)
+		}
+		m.focus = focusLog
 		return m, nil
 
 	case "settings":
