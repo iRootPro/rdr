@@ -10,7 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
 	readability "github.com/go-shiori/go-readability"
 	"github.com/mmcdole/gofeed"
 	"golang.org/x/sync/errgroup"
@@ -103,7 +106,14 @@ func (f *Fetcher) FetchFull(ctx context.Context, articleURL string) (string, err
 		return "", fmt.Errorf("readability: %w", err)
 	}
 
-	md, err := htmltomarkdown.ConvertString(article.Content)
+	conv := converter.NewConverter(
+		converter.WithPlugins(
+			base.NewBasePlugin(),
+			commonmark.NewCommonmarkPlugin(),
+			table.NewTablePlugin(),
+		),
+	)
+	md, err := conv.ConvertString(article.Content)
 	if err != nil {
 		return "", fmt.Errorf("html to markdown: %w", err)
 	}
