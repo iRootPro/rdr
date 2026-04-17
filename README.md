@@ -54,7 +54,7 @@ go build -o rdr .
 
 ### Требования
 
-- Go 1.22+
+- Go 1.22 и выше
 - Терминал с поддержкой true color (Kitty, iTerm2, WezTerm, Ghostty и др.)
 - Шрифт с патчем [Nerd Fonts](https://www.nerdfonts.com/) (для иконок)
 

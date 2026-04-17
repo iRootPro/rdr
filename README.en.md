@@ -54,7 +54,7 @@ Pre-built binaries for macOS (arm64, amd64) and Linux (arm64, amd64) are availab
 
 ### Requirements
 
-- Go 1.22+
+- Go 1.22 or later
 - Terminal with true color support (Kitty, iTerm2, WezTerm, Ghostty, etc.)
 - [Nerd Fonts](https://www.nerdfonts.com/) patched font (for icons)
 
