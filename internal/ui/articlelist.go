@@ -204,7 +204,7 @@ func buildArticlePreviewBox(a db.Article, outerW, bodyRows int, tr *i18n.Strings
 	// articlePreviewText helper (Content → Description fallback).
 	var source string
 	if a.CachedBody != "" {
-		source = a.CachedBody
+		source = sanitizeArticleMarkdown(a.CachedBody, false)
 	} else {
 		source = articlePreviewText(a)
 	}
@@ -242,7 +242,8 @@ func buildArticlePreviewBox(a db.Article, outerW, bodyRows int, tr *i18n.Strings
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorBorder).
 		Padding(0, 1).
-		Width(innerW)
+		Width(innerW).
+		MaxWidth(outerW)
 	return boxStyle.Render(content)
 }
 
