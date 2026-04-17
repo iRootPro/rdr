@@ -183,7 +183,14 @@ func (m Model) updateSettingsAI(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.aiConfig.Provider = ai.ProviderClaude
 			}
+			// Reset fields irrelevant to the new provider.
+			m.aiConfig.Endpoint = ""
+			m.aiConfig.APIKey = ""
+			m.aiConfig.Model = ""
 			_ = m.db.SetAIProvider(m.aiConfig.Provider)
+			_ = m.db.SetAIEndpoint("")
+			_ = m.db.SetAIKey("")
+			_ = m.db.SetAIModel("")
 			return m, nil
 		}
 		m.settingsMode = smAIEdit
