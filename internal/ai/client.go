@@ -157,7 +157,9 @@ func completeClaude(ctx context.Context, cfg Config, system, user string) (strin
 
 	prompt := system + "\n\n" + user
 	args := []string{"--print"}
-	if cfg.Model != "" {
+	// Only pass --model if it looks like a Claude model name.
+	// Ignore leftover model names from other providers (e.g. "apple-foundationmodel").
+	if cfg.Model != "" && strings.HasPrefix(cfg.Model, "claude") {
 		args = append(args, "--model", cfg.Model)
 	}
 
