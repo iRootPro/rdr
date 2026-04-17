@@ -36,7 +36,7 @@ No config needed — first launch opens a language picker, then a feed catalog w
 
 ## Tech stack
 
-- Go 1.22, Bubble Tea, Lip Gloss, glamour
+- Go 1.22+, Bubble Tea, Lip Gloss, glamour
 - SQLite (modernc.org/sqlite, pure Go, no CGO)
 - go-readability for full article extraction
 
