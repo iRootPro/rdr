@@ -273,11 +273,17 @@ ollama pull llama3
 ```
 Endpoint: `http://localhost:11434/v1`, Model: `llama3`
 
-**Claude** (по подписке Claude Max/Pro, без API токенов):
+**Claude Code** (по подписке Claude Max/Pro, без оплаты за API токены):
+
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) — это CLI от Anthropic, который работает по подписке. Перевод и суммаризация используют вашу подписку Claude, а не API-кредиты.
+
+Установка:
 ```bash
 npm install -g @anthropic-ai/claude-code
+claude  # авторизация при первом запуске
 ```
-Provider: `claude` (endpoint и key не нужны). Использует CLI `claude --print`.
+
+Настройка в rdr: Settings (`s`) > AI > Provider → `claude`. Endpoint, API Key и Model оставьте пустыми — не требуются. По желанию можно указать модель (например `claude-sonnet-4-20250514`).
 
 **OpenAI** (облако, платно):
 Provider: `openai`, Endpoint: `https://api.openai.com/v1`, API Key: `sk-...`, Model: `gpt-4o-mini`
