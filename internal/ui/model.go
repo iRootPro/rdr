@@ -2281,8 +2281,12 @@ func (m Model) toggleReadOnCurrent() (tea.Model, tea.Cmd) {
 		a := m.articles[m.selArt]
 		id = a.ID
 		makeRead = a.ReadAt == nil
-		// Move cursor down after toggling.
-		if m.selArt < len(m.articles)-1 {
+		// Move cursor down only when the article will stay visible
+		// (filter=all or marking as unread). With filter=unread,
+		// marking read removes the article so the next one slides
+		// into the current position automatically.
+		staysVisible := m.filter == filterAll || !makeRead
+		if staysVisible && m.selArt < len(m.articles)-1 {
 			m.selArt++
 		}
 	default:
