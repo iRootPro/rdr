@@ -16,6 +16,7 @@ const (
 	atomFreeWord    queryAtomKind = iota // bare word: matches title OR feed name
 	atomStatusRead                       // read / unread
 	atomStatusStar                       // starred / unstarred
+	atomStatusBookmark                   // bookmarked / unbookmarked
 	atomField                            // title:, feed:, description:
 	atomTimeNewer                        // newer than a duration relative to now
 	atomTimeOlder                        // older than a duration relative to now
@@ -83,6 +84,10 @@ func parseToken(tok string, now time.Time) (queryAtom, error) {
 		return queryAtom{Kind: atomStatusStar, StatusValue: true}, nil
 	case "unstarred":
 		return queryAtom{Kind: atomStatusStar, StatusValue: false}, nil
+	case "bookmarked":
+		return queryAtom{Kind: atomStatusBookmark, StatusValue: true}, nil
+	case "unbookmarked":
+		return queryAtom{Kind: atomStatusBookmark, StatusValue: false}, nil
 	case "today":
 		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 		return queryAtom{
@@ -198,6 +203,10 @@ func matchAtom(a queryAtom, it db.SearchItem) bool {
 	case atomStatusStar:
 		isStarred := it.StarredAt != nil
 		return isStarred == a.StatusValue
+
+	case atomStatusBookmark:
+		isBookmarked := it.BookmarkedAt != nil
+		return isBookmarked == a.StatusValue
 
 	case atomField:
 		switch a.Field {

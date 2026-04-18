@@ -32,6 +32,7 @@ type keyMap struct {
 	Zen           key.Binding
 	Command       key.Binding
 	Star          key.Binding
+	Bookmark      key.Binding
 	FilterAll     key.Binding
 	FilterUnread  key.Binding
 	FilterStarred key.Binding
@@ -76,6 +77,7 @@ func defaultKeys(tr *i18n.Strings) keyMap {
 		Zen:           key.NewBinding(key.WithKeys("z", "я"), key.WithHelp("z", k.Zen)),
 		Command:       key.NewBinding(key.WithKeys(":"), key.WithHelp(":", k.Command)),
 		Star:          key.NewBinding(key.WithKeys("m", "ь"), key.WithHelp("m", k.ToggleStar)),
+		Bookmark:      key.NewBinding(key.WithKeys("b", "и"), key.WithHelp("b", k.ToggleBookmark)),
 		FilterAll:     key.NewBinding(key.WithKeys("a", "ф"), key.WithHelp("a", k.FilterAll)),
 		FilterUnread:  key.NewBinding(key.WithKeys("u", "г"), key.WithHelp("u", k.FilterUnread)),
 		FilterStarred: key.NewBinding(key.WithKeys("S", "Ы"), key.WithHelp("S", k.FilterStarred)),

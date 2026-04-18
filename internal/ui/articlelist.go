@@ -127,6 +127,8 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		switch {
 		case a.StarredAt != nil:
 			marker = lipgloss.NewStyle().Foreground(colorYellow).Background(rowBG).Render("★ ")
+		case a.BookmarkedAt != nil:
+			marker = lipgloss.NewStyle().Foreground(colorSecondary).Background(rowBG).Render("◆ ")
 		case a.ReadAt == nil:
 			marker = lipgloss.NewStyle().Foreground(colorAccent).Background(rowBG).Render("● ")
 		default:

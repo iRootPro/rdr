@@ -149,6 +149,8 @@ func buildCommandCompletions(tr *i18n.Strings) []commandSuggestion {
 		{"zen", c.HelpZen},
 		{"help", c.HelpHelp},
 		{"discover", c.HelpDiscover},
+		{"bookmark", c.HelpBookmark},
+		{"unbookmark", c.HelpUnbookmark},
 		{"log", "Application log"},
 		{"settings", c.HelpSettings},
 		{"search", c.HelpSearch},
@@ -388,6 +390,20 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 		tick := m.startBusy(tr.Status.Unstarring)
 		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "unstar"), tick)
 
+	case "bookmark":
+		if len(args) == 0 {
+			return m.toggleBookmarkOnCurrent()
+		}
+		tick := m.startBusy("bookmark…")
+		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "bookmark"), tick)
+
+	case "unbookmark":
+		if len(args) == 0 {
+			return m, nil
+		}
+		tick := m.startBusy("unbookmark…")
+		return m, tea.Batch(batchApplyCmd(m.db, strings.Join(args, " "), "unbookmark"), tick)
+
 	case "copy":
 		if len(args) < 2 {
 			m.err = fmt.Errorf("%s", tr.Errors.CopyNeedsArg)
@@ -545,6 +561,10 @@ func batchApplyCmd(d *db.DB, queryStr, action string) tea.Cmd {
 			err = d.BulkSetStarred(ids, true)
 		case "unstar":
 			err = d.BulkSetStarred(ids, false)
+		case "bookmark":
+			_, err = d.BulkSetBookmarked(ids, true)
+		case "unbookmark":
+			_, err = d.BulkSetBookmarked(ids, false)
 		default:
 			return errMsg{fmt.Errorf("batch: unknown action %q", action)}
 		}

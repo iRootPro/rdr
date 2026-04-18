@@ -70,4 +70,9 @@ var migrations = []string{
 	UPDATE articles SET last_fetched_at = CURRENT_TIMESTAMP;
 	CREATE INDEX idx_articles_last_fetched_at ON articles(last_fetched_at);
 	`,
+	// 006: read-later bookmarks
+	`
+	ALTER TABLE articles ADD COLUMN bookmarked_at DATETIME;
+	CREATE INDEX idx_articles_bookmarked_at ON articles(bookmarked_at) WHERE bookmarked_at IS NOT NULL;
+	`,
 }
