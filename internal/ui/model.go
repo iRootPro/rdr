@@ -1003,7 +1003,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.bookmarked {
 			label = m.tr.Toasts.Unbookmarked
 		}
-		return m, m.showToast(label)
+		cmds := []tea.Cmd{loadFeedsCmd(m.db), m.showToast(label)}
+		// If in a smart folder with "bookmarked" query, reload so the
+		// unbookmarked article disappears from the list.
+		if !msg.bookmarked {
+			if e, ok := m.currentEntry(); ok && e.Kind == entryFolder {
+				if e.FolderIdx >= 0 && e.FolderIdx < len(m.smartFolders) {
+					if strings.Contains(m.smartFolders[e.FolderIdx].Query, "bookmarked") {
+						cmds = append(cmds, m.loadCurrentCmd())
+					}
+				}
+			}
+		}
+		return m, tea.Batch(cmds...)
 
 	case errMsg:
 		m.err = msg.err
@@ -2617,12 +2629,13 @@ func (m *Model) refreshFolderCounts() {
 	}
 	for _, a := range m.allArticles {
 		it := db.SearchItem{
-			Title:       a.Title,
-			FeedName:    a.FeedName,
-			Description: a.Description,
-			PublishedAt: a.PublishedAt,
-			ReadAt:      a.ReadAt,
-			StarredAt:   a.StarredAt,
+			Title:        a.Title,
+			FeedName:     a.FeedName,
+			Description:  a.Description,
+			PublishedAt:  a.PublishedAt,
+			ReadAt:       a.ReadAt,
+			StarredAt:    a.StarredAt,
+			BookmarkedAt: a.BookmarkedAt,
 		}
 		for i, atoms := range parsed {
 			if atoms == nil {
@@ -2753,12 +2766,13 @@ func loadFolderArticlesCmd(d *db.DB, folderIdx int, query string) tea.Cmd {
 		for _, a := range all {
 			// Reuse the search-item evaluator by mapping required fields.
 			it := db.SearchItem{
-				Title:       a.Title,
-				FeedName:    a.FeedName,
-				Description: a.Description,
-				PublishedAt: a.PublishedAt,
-				ReadAt:      a.ReadAt,
-				StarredAt:   a.StarredAt,
+				Title:        a.Title,
+				FeedName:     a.FeedName,
+				Description:  a.Description,
+				PublishedAt:  a.PublishedAt,
+				ReadAt:       a.ReadAt,
+				StarredAt:    a.StarredAt,
+				BookmarkedAt: a.BookmarkedAt,
 			}
 			if EvalQuery(atoms, it) {
 				out = append(out, a)
