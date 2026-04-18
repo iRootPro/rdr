@@ -21,7 +21,8 @@ Vim-style navigation, full article reading, smart folders, query language search
 - Feed categories with collapse/expand
 - Smart folders (saved search queries)
 - Search with query language (`title:rust unread newer:1w`)
-- Batch operations: mark read, star, copy by query
+- Read Later queue — separate from Starred, for articles to read later (`b`)
+- Batch operations: mark read, star, bookmark, copy by query
 - OPML import and export
 - 4 themes: Dark (Tokyo Night), Light (Catppuccin Latte), Catppuccin Mocha, Rose Pine
 - Nerd Font icons for sources (GitHub, HN, Habr, Lobsters, etc.)
@@ -149,6 +150,7 @@ Feeds and smart folders from the config are synced into the database on every la
 | `x` | Toggle read/unread |
 | `X` | Mark all read |
 | `m` | Toggle star |
+| `b` | Read later (bookmark) |
 | `n` | Next unread |
 | `y` | Copy URL |
 | `Y` | Copy as markdown link |
@@ -210,6 +212,8 @@ unread              unread articles only
 read                read articles only
 starred             starred articles only
 unstarred           not starred
+bookmarked          in read later queue
+unbookmarked        not in read later
 today               published today
 yesterday           published yesterday
 newer:1w            newer than 1 week (1d, 3h, 45m, 1mo, 1y)
@@ -233,6 +237,8 @@ Invoked via `:` (command mode). Tab autocomplete available.
 | `:unread <query>` | Batch mark as unread |
 | `:star <query>` | Batch star |
 | `:unstar <query>` | Batch unstar |
+| `:bookmark <query>` | Batch add to read later |
+| `:unbookmark <query>` | Batch remove from read later |
 | `:copy url <query>` | Copy URLs of matching articles |
 | `:copy md <query>` | Copy as markdown links |
 | `:import <path>` | Import feeds from OPML |
