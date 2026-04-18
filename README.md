@@ -1,5 +1,11 @@
 # rdr
 
+[![GitHub Release](https://img.shields.io/github/v/release/iRootPro/rdr)](https://github.com/iRootPro/rdr/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/iRootPro/rdr/total)](https://github.com/iRootPro/rdr/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/iRootPro/rdr)](https://github.com/iRootPro/rdr)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/iRootPro/rdr)](https://go.dev/)
+[![License](https://img.shields.io/github/license/iRootPro/rdr)](LICENSE)
+
 [English](README.en.md) | Русский
 
 Терминальная читалка RSS/Atom лент. Написана на Go с использованием [Bubble Tea](https://github.com/charmbracelet/bubbletea) и [Lip Gloss](https://github.com/charmbracelet/lipgloss).
