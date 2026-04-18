@@ -422,6 +422,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.Star):
 			return m.toggleStarOnCurrent()
+		case key.Matches(msg, m.keys.Bookmark):
+			return m.toggleBookmarkOnCurrent()
 		case key.Matches(msg, m.keys.FilterAll):
 			return m.switchFilter(filterAll)
 		case key.Matches(msg, m.keys.FilterUnread):
@@ -965,6 +967,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.loadCurrentCmd())
 		}
 		return m, tea.Batch(cmds...)
+
+	case bookmarkToggledMsg:
+		m.err = nil
+		now := time.Now().UTC()
+		for i := range m.articles {
+			if m.articles[i].ID == msg.articleID {
+				if msg.bookmarked {
+					m.articles[i].BookmarkedAt = &now
+				} else {
+					m.articles[i].BookmarkedAt = nil
+				}
+				break
+			}
+		}
+		if m.readerArt != nil && m.readerArt.ID == msg.articleID {
+			if msg.bookmarked {
+				m.readerArt.BookmarkedAt = &now
+			} else {
+				m.readerArt.BookmarkedAt = nil
+			}
+		}
+		for i := range m.allArticles {
+			if m.allArticles[i].ID == msg.articleID {
+				if msg.bookmarked {
+					m.allArticles[i].BookmarkedAt = &now
+				} else {
+					m.allArticles[i].BookmarkedAt = nil
+				}
+				break
+			}
+		}
+		m.refreshFolderCounts()
+		label := m.tr.Toasts.Bookmarked
+		if !msg.bookmarked {
+			label = m.tr.Toasts.Unbookmarked
+		}
+		return m, m.showToast(label)
 
 	case errMsg:
 		m.err = msg.err
@@ -2413,6 +2452,29 @@ func toggleStarCmd(d *db.DB, articleID int64) tea.Cmd {
 			return errMsg{err}
 		}
 		return starToggledMsg{articleID: articleID, starred: starred}
+	}
+}
+
+func (m Model) toggleBookmarkOnCurrent() (tea.Model, tea.Cmd) {
+	var id int64
+	switch {
+	case m.focus == focusReader && m.readerArt != nil:
+		id = m.readerArt.ID
+	case m.focus == focusArticles && len(m.articles) > 0:
+		id = m.articles[m.selArt].ID
+	default:
+		return m, nil
+	}
+	return m, toggleBookmarkCmd(m.db, id)
+}
+
+func toggleBookmarkCmd(d *db.DB, articleID int64) tea.Cmd {
+	return func() tea.Msg {
+		bookmarked, err := d.ToggleBookmark(articleID)
+		if err != nil {
+			return errMsg{err}
+		}
+		return bookmarkToggledMsg{articleID: articleID, bookmarked: bookmarked}
 	}
 }
 

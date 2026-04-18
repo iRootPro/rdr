@@ -18,8 +18,9 @@ type Article struct {
 	Content     string
 	PublishedAt time.Time
 	ReadAt      *time.Time
-	StarredAt   *time.Time
-	CachedAt    *time.Time
+	StarredAt    *time.Time
+	BookmarkedAt *time.Time
+	CachedAt     *time.Time
 	CachedBody  string
 	CreatedAt   time.Time
 }
@@ -97,7 +98,7 @@ func (d *DB) ListArticlesFiltered(feedID int64, filter ArticleFilter, limit int)
 
 	rows, err := d.sql.Query(`
 		SELECT id, feed_id, title, url, description, content,
-		       published_at, read_at, starred_at, cached_at, cached_body, created_at
+		       published_at, read_at, starred_at, bookmarked_at, cached_at, cached_body, created_at
 		FROM articles
 		`+where+`
 		ORDER BY published_at DESC, id DESC
@@ -111,16 +112,17 @@ func (d *DB) ListArticlesFiltered(feedID int64, filter ArticleFilter, limit int)
 	var out []Article
 	for rows.Next() {
 		var (
-			a          Article
-			desc, cont sql.NullString
-			readAt     sql.NullTime
-			starredAt  sql.NullTime
-			cachedAt   sql.NullTime
-			cachedBody sql.NullString
+			a            Article
+			desc, cont   sql.NullString
+			readAt       sql.NullTime
+			starredAt    sql.NullTime
+			bookmarkedAt sql.NullTime
+			cachedAt     sql.NullTime
+			cachedBody   sql.NullString
 		)
 		if err := rows.Scan(
 			&a.ID, &a.FeedID, &a.Title, &a.URL, &desc, &cont,
-			&a.PublishedAt, &readAt, &starredAt, &cachedAt, &cachedBody, &a.CreatedAt,
+			&a.PublishedAt, &readAt, &starredAt, &bookmarkedAt, &cachedAt, &cachedBody, &a.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -133,6 +135,10 @@ func (d *DB) ListArticlesFiltered(feedID int64, filter ArticleFilter, limit int)
 		if starredAt.Valid {
 			t := starredAt.Time
 			a.StarredAt = &t
+		}
+		if bookmarkedAt.Valid {
+			t := bookmarkedAt.Time
+			a.BookmarkedAt = &t
 		}
 		if cachedAt.Valid {
 			t := cachedAt.Time
@@ -153,7 +159,7 @@ func (d *DB) ListAllArticles(limit int) ([]Article, error) {
 	}
 	rows, err := d.sql.Query(`
 		SELECT a.id, a.feed_id, f.name, a.title, a.url, a.description, a.content,
-		       a.published_at, a.read_at, a.starred_at, a.cached_at, a.cached_body, a.created_at
+		       a.published_at, a.read_at, a.starred_at, a.bookmarked_at, a.cached_at, a.cached_body, a.created_at
 		FROM articles a
 		JOIN feeds f ON f.id = a.feed_id
 		ORDER BY a.published_at DESC, a.id DESC
@@ -167,16 +173,17 @@ func (d *DB) ListAllArticles(limit int) ([]Article, error) {
 	var out []Article
 	for rows.Next() {
 		var (
-			a          Article
-			desc, cont sql.NullString
-			readAt     sql.NullTime
-			starredAt  sql.NullTime
-			cachedAt   sql.NullTime
-			cachedBody sql.NullString
+			a            Article
+			desc, cont   sql.NullString
+			readAt       sql.NullTime
+			starredAt    sql.NullTime
+			bookmarkedAt sql.NullTime
+			cachedAt     sql.NullTime
+			cachedBody   sql.NullString
 		)
 		if err := rows.Scan(
 			&a.ID, &a.FeedID, &a.FeedName, &a.Title, &a.URL, &desc, &cont,
-			&a.PublishedAt, &readAt, &starredAt, &cachedAt, &cachedBody, &a.CreatedAt,
+			&a.PublishedAt, &readAt, &starredAt, &bookmarkedAt, &cachedAt, &cachedBody, &a.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -189,6 +196,10 @@ func (d *DB) ListAllArticles(limit int) ([]Article, error) {
 		if starredAt.Valid {
 			t := starredAt.Time
 			a.StarredAt = &t
+		}
+		if bookmarkedAt.Valid {
+			t := bookmarkedAt.Time
+			a.BookmarkedAt = &t
 		}
 		if cachedAt.Valid {
 			t := cachedAt.Time
@@ -304,6 +315,45 @@ func (d *DB) ToggleStar(articleID int64) (bool, error) {
 	return true, err
 }
 
+// ToggleBookmark flips the bookmarked (read-later) state of an article.
+func (d *DB) ToggleBookmark(articleID int64) (bool, error) {
+	var bookmarkedAt sql.NullTime
+	err := d.sql.QueryRow(`SELECT bookmarked_at FROM articles WHERE id = ?`, articleID).Scan(&bookmarkedAt)
+	if err != nil {
+		return false, fmt.Errorf("read bookmarked_at: %w", err)
+	}
+	if bookmarkedAt.Valid {
+		_, err := d.sql.Exec(`UPDATE articles SET bookmarked_at = NULL WHERE id = ?`, articleID)
+		return false, err
+	}
+	_, err = d.sql.Exec(`UPDATE articles SET bookmarked_at = ? WHERE id = ?`, time.Now().UTC(), articleID)
+	return true, err
+}
+
+// BulkSetBookmarked sets bookmarked_at to now() or NULL on many articles.
+func (d *DB) BulkSetBookmarked(ids []int64, bookmark bool) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	var query string
+	var args []any
+	if bookmark {
+		query, args = bulkIDQuery(
+			`UPDATE articles SET bookmarked_at = ? WHERE bookmarked_at IS NULL AND id IN`,
+			ids, time.Now().UTC())
+	} else {
+		query, args = bulkIDQuery(
+			`UPDATE articles SET bookmarked_at = NULL WHERE id IN`,
+			ids)
+	}
+	res, err := d.sql.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 func (d *DB) MarkRead(articleID int64) error {
 	_, err := d.sql.Exec(
 		`UPDATE articles SET read_at = ? WHERE id = ? AND read_at IS NULL`,
@@ -324,16 +374,17 @@ func (d *DB) CacheArticle(id int64, body string) error {
 }
 
 type SearchItem struct {
-	ArticleID   int64
-	FeedID      int64
-	FeedName    string
-	Title       string
-	URL         string
-	Description string
-	CachedBody  string
-	PublishedAt time.Time
-	ReadAt      *time.Time
-	StarredAt   *time.Time
+	ArticleID    int64
+	FeedID       int64
+	FeedName     string
+	Title        string
+	URL          string
+	Description  string
+	CachedBody   string
+	PublishedAt  time.Time
+	ReadAt       *time.Time
+	StarredAt    *time.Time
+	BookmarkedAt *time.Time
 }
 
 func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
@@ -342,7 +393,7 @@ func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
 	}
 	rows, err := d.sql.Query(`
 		SELECT a.id, a.feed_id, f.name, a.title, a.url,
-		       a.description, a.cached_body, a.published_at, a.read_at, a.starred_at
+		       a.description, a.cached_body, a.published_at, a.read_at, a.starred_at, a.bookmarked_at
 		FROM articles a
 		JOIN feeds f ON f.id = a.feed_id
 		ORDER BY a.published_at DESC, a.id DESC
@@ -356,15 +407,16 @@ func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
 	var out []SearchItem
 	for rows.Next() {
 		var (
-			item       SearchItem
-			desc       sql.NullString
-			cachedBody sql.NullString
-			readAt     sql.NullTime
-			starredAt  sql.NullTime
+			item         SearchItem
+			desc         sql.NullString
+			cachedBody   sql.NullString
+			readAt       sql.NullTime
+			starredAt    sql.NullTime
+			bookmarkedAt sql.NullTime
 		)
 		if err := rows.Scan(
 			&item.ArticleID, &item.FeedID, &item.FeedName, &item.Title, &item.URL,
-			&desc, &cachedBody, &item.PublishedAt, &readAt, &starredAt,
+			&desc, &cachedBody, &item.PublishedAt, &readAt, &starredAt, &bookmarkedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -377,6 +429,10 @@ func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
 		if starredAt.Valid {
 			t := starredAt.Time
 			item.StarredAt = &t
+		}
+		if bookmarkedAt.Valid {
+			t := bookmarkedAt.Time
+			item.BookmarkedAt = &t
 		}
 		out = append(out, item)
 	}

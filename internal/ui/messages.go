@@ -85,6 +85,11 @@ type errMsg struct {
 	err error
 }
 
+type bookmarkToggledMsg struct {
+	articleID  int64
+	bookmarked bool
+}
+
 type aiResultMsg struct {
 	kind    string // "translate" | "summarize"
 	content string

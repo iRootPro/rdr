@@ -251,6 +251,7 @@ func seedSmartFolders(database *db.DB, tr *i18n.Strings) {
 		{tr.Catalog.FolderToday, "today"},
 		{tr.Catalog.FolderThisWeek, "newer:1w unread"},
 		{tr.Catalog.FolderStarred, "starred"},
+		{tr.Catalog.FolderReadLater, "bookmarked"},
 	}
 	for _, d := range defaults {
 		_, _ = database.InsertSmartFolder(d.Name, d.Query)

@@ -46,7 +46,8 @@ type CatalogStrings struct {
 	FolderInbox    string
 	FolderToday    string
 	FolderThisWeek string
-	FolderStarred  string
+	FolderStarred   string
+	FolderReadLater string
 }
 
 type SettingsStrings struct {
@@ -241,7 +242,8 @@ type KeysStrings struct {
 	NextUnread    string
 	Zen           string
 	Command       string
-	ToggleStar    string
+	ToggleStar     string
+	ToggleBookmark string
 	FilterAll     string
 	FilterUnread  string
 	FilterStarred string
@@ -258,6 +260,8 @@ type KeysStrings struct {
 type ToastsStrings struct {
 	Starred          string
 	Unstarred        string
+	Bookmarked       string
+	Unbookmarked     string
 	MarkedRead       string
 	MarkedUnread     string
 	MarkedReadFmt    string // "marked %d read"
@@ -350,7 +354,9 @@ type CommandStrings struct {
 	HelpFilterAll string
 	HelpFilterUnread string
 	HelpFilterStarred string
-	HelpStar     string
+	HelpStar       string
+	HelpBookmark   string
+	HelpUnbookmark string
 	HelpRead     string
 	HelpUnread   string
 	HelpUnstar   string
@@ -605,8 +611,9 @@ var en = Strings{
 		NextUnread:    "next unread",
 		Zen:           "zen",
 		Command:       "command",
-		ToggleStar:    "toggle star",
-		FilterAll:     "all articles",
+		ToggleStar:     "toggle star",
+		ToggleBookmark: "read later",
+		FilterAll:      "all articles",
 		FilterUnread:  "unread only",
 		FilterStarred: "starred only",
 		NextArticle:   "next article",
@@ -621,6 +628,8 @@ var en = Strings{
 	Toasts: ToastsStrings{
 		Starred:          "★ starred",
 		Unstarred:        "unstarred",
+		Bookmarked:       "saved for later",
+		Unbookmarked:     "removed from read later",
 		MarkedRead:       "marked read",
 		MarkedUnread:     "marked unread",
 		MarkedReadFmt:    "marked %d read",
@@ -710,6 +719,8 @@ var en = Strings{
 		HelpFilterUnread:  "Show only unread articles",
 		HelpFilterStarred: "Show only starred articles",
 		HelpStar:          "Toggle star on current article",
+		HelpBookmark:      "Toggle read later (:bookmark <query>)",
+		HelpUnbookmark:    "Remove from read later (:unbookmark <query>)",
 		HelpRead:          "Mark matching articles read (:read <query>)",
 		HelpUnread:        "Mark matching articles unread (:unread <query>)",
 		HelpUnstar:        "Unstar matching articles (:unstar <query>)",
@@ -805,7 +816,8 @@ var en = Strings{
 		FolderInbox:    "Inbox",
 		FolderToday:    "Today",
 		FolderThisWeek: "This Week",
-		FolderStarred:  "Starred",
+		FolderStarred:   "Starred",
+		FolderReadLater: "Read Later",
 	},
 }
 
@@ -985,8 +997,9 @@ var ru = Strings{
 		NextUnread:    "следующая непрочитанная",
 		Zen:           "zen",
 		Command:       "команда",
-		ToggleStar:    "звезда",
-		FilterAll:     "все статьи",
+		ToggleStar:     "звезда",
+		ToggleBookmark: "почитать позже",
+		FilterAll:      "все статьи",
 		FilterUnread:  "непрочитанные",
 		FilterStarred: "со звездой",
 		NextArticle:   "следующая статья",
@@ -1001,6 +1014,8 @@ var ru = Strings{
 	Toasts: ToastsStrings{
 		Starred:          "★ со звездой",
 		Unstarred:        "звезда снята",
+		Bookmarked:       "добавлено в «почитать позже»",
+		Unbookmarked:     "убрано из «почитать позже»",
 		MarkedRead:       "прочитано",
 		MarkedUnread:     "непрочитано",
 		MarkedReadFmt:    "прочитано: %d",
@@ -1090,6 +1105,8 @@ var ru = Strings{
 		HelpFilterUnread:  "Только непрочитанные",
 		HelpFilterStarred: "Только со звездой",
 		HelpStar:          "Переключить звезду на текущей статье",
+		HelpBookmark:      "Почитать позже (:bookmark <запрос>)",
+		HelpUnbookmark:    "Убрать из «почитать позже» (:unbookmark <запрос>)",
 		HelpRead:          "Отметить совпадения прочитанными (:read <запрос>)",
 		HelpUnread:        "Отметить совпадения непрочитанными (:unread <запрос>)",
 		HelpUnstar:        "Снять звезду со совпадений (:unstar <запрос>)",
@@ -1185,7 +1202,8 @@ var ru = Strings{
 		FolderInbox:    "Входящие",
 		FolderToday:    "Сегодня",
 		FolderThisWeek: "За неделю",
-		FolderStarred:  "Избранные",
+		FolderStarred:   "Избранные",
+		FolderReadLater: "Почитать позже",
 	},
 }
 
