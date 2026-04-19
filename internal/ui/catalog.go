@@ -35,8 +35,8 @@ var catalog = []CatalogEntry{
 	{Name: "CSS-Tricks", URL: "https://css-tricks.com/feed/", Category: "Programming"},
 
 	// AI / ML
-	{Name: "OpenAI Blog", URL: "https://openai.com/blog/rss.xml", Category: "AI / ML"},
-	{Name: "Anthropic", URL: "https://www.anthropic.com/rss.xml", Category: "AI / ML"},
+	{Name: "AI News (Jack Clark)", URL: "https://importai.substack.com/feed", Category: "AI / ML"},
+	{Name: "The Batch (deeplearning.ai)", URL: "https://www.deeplearning.ai/the-batch/feed/", Category: "AI / ML"},
 	{Name: "Hugging Face Blog", URL: "https://huggingface.co/blog/feed.xml", Category: "AI / ML"},
 	{Name: "MIT AI News", URL: "https://news.mit.edu/topic/mitartificial-intelligence2-rss.xml", Category: "AI / ML"},
 
