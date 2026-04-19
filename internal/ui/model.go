@@ -666,6 +666,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, r := range msg.results {
 			if r.Err != nil {
 				m.feedErrors[r.Feed.ID] = r.Err
+				rlog.Logf("sync", "error: %s — %v", r.Feed.Name, r.Err)
 				failed++
 			}
 			added += r.Added
@@ -2064,6 +2065,10 @@ func (m Model) View() string {
 	}
 	if m.err != nil {
 		status = paintLineBG(status+"  "+errStyle.Render("! "+m.err.Error()), m.width)
+	} else if e, ok := m.currentEntry(); ok && e.Kind == entryFeed {
+		if ferr, exists := m.feedErrors[e.FeedID]; exists {
+			status = paintLineBG(status+"  "+errStyle.Render("! "+ferr.Error()), m.width)
+		}
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Top, row, status, helpView)
