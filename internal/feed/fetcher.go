@@ -41,7 +41,7 @@ type Fetcher struct {
 func New(d *db.DB) *Fetcher {
 	return &Fetcher{
 		db:     d,
-		client: &http.Client{Timeout: 15 * time.Second},
+		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
