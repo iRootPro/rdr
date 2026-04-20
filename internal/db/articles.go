@@ -362,6 +362,100 @@ func (d *DB) MarkRead(articleID int64) error {
 	return err
 }
 
+// SaveLibraryURL inserts a saved URL into the Library feed (or updates
+// the placeholder title on duplicate, preserving read/star/bookmark
+// state). Returns the article ID and whether it was newly inserted.
+// Used by the Add-URL modal: caller passes a fast placeholder title
+// (e.g. host) and updates it later via UpdateLibraryFetched once the
+// background readability fetch returns the real <title>.
+func (d *DB) SaveLibraryURL(libraryFeedID int64, url, placeholderTitle string) (int64, bool, error) {
+	now := time.Now().UTC()
+	tx, err := d.sql.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var existingID int64
+	err = tx.QueryRow(
+		`SELECT id FROM articles WHERE feed_id = ? AND url = ?`,
+		libraryFeedID, url,
+	).Scan(&existingID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, fmt.Errorf("check library article: %w", err)
+	}
+
+	if existingID != 0 {
+		// Bump last_fetched_at so Trim safety logic stays consistent
+		// even though Library is never trimmed today.
+		if _, err := tx.Exec(
+			`UPDATE articles SET last_fetched_at = ? WHERE id = ?`,
+			now, existingID,
+		); err != nil {
+			return 0, false, fmt.Errorf("touch library article: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return 0, false, err
+		}
+		return existingID, false, nil
+	}
+
+	res, err := tx.Exec(`
+		INSERT INTO articles
+			(feed_id, title, url, description, content, published_at, last_fetched_at)
+		VALUES (?, ?, ?, '', '', ?, ?)
+	`, libraryFeedID, placeholderTitle, url, now, now)
+	if err != nil {
+		return 0, false, fmt.Errorf("insert library article: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
+// UpdateLibraryFetched stores the result of an async readability fetch:
+// the extracted page title (if non-empty) replaces the placeholder, and
+// the Markdown body is cached so the reader can show it immediately on
+// open. Title is only overwritten when extraction succeeded — empty
+// titles leave the placeholder intact.
+func (d *DB) UpdateLibraryFetched(id int64, title, body string) error {
+	now := time.Now().UTC()
+	if title != "" {
+		_, err := d.sql.Exec(
+			`UPDATE articles SET title = ?, cached_body = ?, cached_at = ? WHERE id = ?`,
+			title, body, now, id,
+		)
+		if err != nil {
+			return fmt.Errorf("update library article: %w", err)
+		}
+		return nil
+	}
+	_, err := d.sql.Exec(
+		`UPDATE articles SET cached_body = ?, cached_at = ? WHERE id = ?`,
+		body, now, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update library article body: %w", err)
+	}
+	return nil
+}
+
+// DeleteArticle removes a single article by id. Used by the Library
+// pane to discard saved URLs the user no longer wants — TrimArticles
+// skips the system feed, so without this the table grows forever.
+func (d *DB) DeleteArticle(id int64) error {
+	_, err := d.sql.Exec(`DELETE FROM articles WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete article: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) CacheArticle(id int64, body string) error {
 	_, err := d.sql.Exec(
 		`UPDATE articles SET cached_body = ?, cached_at = ? WHERE id = ?`,
@@ -439,17 +533,19 @@ func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
 	return out, rows.Err()
 }
 
-// TrimArticles deletes the oldest read articles for a feed so that at most
-// `max` rows remain. Unread articles are always kept, even if this leaves
-// the feed above the limit.
 // TrimArticles prunes old read articles in a feed once its total count
-// exceeds max. cutoff acts as a safety line: any article whose
-// last_fetched_at is >= cutoff is considered "still in the current RSS
-// response" and is never deleted, even if it's read. Without this
-// guard, marking an item read right before a refresh would delete it,
-// and the next fetch would re-insert it as unread (the RSS still
-// lists it).
-func (d *DB) TrimArticles(feedID int64, max int, cutoff time.Time) error {
+// exceeds max. An article is eligible for deletion only when ALL of:
+//
+//   - read_at IS NOT NULL (unread is always kept)
+//   - starred_at IS NULL  (star is an explicit user "save")
+//   - bookmarked_at IS NULL (read-later is an explicit user "save")
+//   - read_at < readCutoff (recently-read articles get a grace window so
+//     a stray `x` keystroke doesn't immediately destroy the row)
+//   - last_fetched_at IS NULL OR last_fetched_at < fetchCutoff (anything
+//     still in the current RSS response is protected — otherwise marking
+//     read right before a refresh would delete it and the next fetch
+//     would re-insert it as unread)
+func (d *DB) TrimArticles(feedID int64, max int, fetchCutoff, readCutoff time.Time) error {
 	if max <= 0 {
 		return nil
 	}
@@ -459,12 +555,15 @@ func (d *DB) TrimArticles(feedID int64, max int, cutoff time.Time) error {
 			SELECT id FROM articles
 			WHERE feed_id = ?
 			  AND read_at IS NOT NULL
+			  AND read_at < ?
+			  AND starred_at IS NULL
+			  AND bookmarked_at IS NULL
 			  AND (last_fetched_at IS NULL OR last_fetched_at < ?)
 			ORDER BY published_at ASC, id ASC
 			LIMIT MAX(0, (
 				SELECT COUNT(*) FROM articles WHERE feed_id = ?
 			) - ?)
 		)
-	`, feedID, cutoff, feedID, max)
+	`, feedID, readCutoff, fetchCutoff, feedID, max)
 	return err
 }

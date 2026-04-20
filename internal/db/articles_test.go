@@ -98,11 +98,14 @@ func TestTrimArticles_RemovesOldestReadBeyondLimit(t *testing.T) {
 		}
 	}
 
-	// cutoff in the future so ALL rows look "stale" to trim — this
-	// simulates the case where the articles are no longer in the
-	// current RSS response.
-	cutoff := time.Now().UTC().Add(time.Hour)
-	if err := d.TrimArticles(f.ID, 3, cutoff); err != nil {
+	// fetchCutoff in the future so ALL rows look "stale" to trim —
+	// this simulates the case where the articles are no longer in the
+	// current RSS response. readCutoff also in the future so the
+	// just-marked-read rows count as "old enough" to trim (otherwise
+	// the grace window would protect them).
+	fetchCutoff := time.Now().UTC().Add(time.Hour)
+	readCutoff := time.Now().UTC().Add(time.Hour)
+	if err := d.TrimArticles(f.ID, 3, fetchCutoff, readCutoff); err != nil {
 		t.Fatalf("TrimArticles: %v", err)
 	}
 
@@ -140,11 +143,14 @@ func TestTrimArticles_SkipsFreshlyFetched(t *testing.T) {
 		_ = d.MarkRead(a.ID)
 	}
 
-	// cutoff BEFORE the fetch start — every article is "fresh" (its
-	// last_fetched_at >= cutoff), so trim must not touch them even
-	// when the limit is 0 (would otherwise delete all of them).
-	cutoff := base.Add(-time.Hour)
-	if err := d.TrimArticles(f.ID, 1, cutoff); err != nil {
+	// fetchCutoff BEFORE the fetch start — every article is "fresh"
+	// (its last_fetched_at >= fetchCutoff), so trim must not touch
+	// them even when the limit is 0 (would otherwise delete all of
+	// them). readCutoff is irrelevant here because the fetchCutoff
+	// guard kicks in first.
+	fetchCutoff := base.Add(-time.Hour)
+	readCutoff := time.Now().UTC().Add(time.Hour)
+	if err := d.TrimArticles(f.ID, 1, fetchCutoff, readCutoff); err != nil {
 		t.Fatalf("TrimArticles: %v", err)
 	}
 
@@ -191,7 +197,10 @@ func TestTrimArticles_UserFlowSurvivesRefresh(t *testing.T) {
 	}
 	// Trim with a very aggressive limit (would normally delete read
 	// articles): the protection must keep the just-upserted rows.
-	if err := d.TrimArticles(f.ID, 1, fetchStart); err != nil {
+	// readCutoff in the future so the read-grace doesn't mask the
+	// regression — we want fetchCutoff alone to do the protecting.
+	readCutoff := time.Now().UTC().Add(time.Hour)
+	if err := d.TrimArticles(f.ID, 1, fetchStart, readCutoff); err != nil {
 		t.Fatalf("TrimArticles: %v", err)
 	}
 
@@ -209,6 +218,119 @@ func TestTrimArticles_UserFlowSurvivesRefresh(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("marked article disappeared after refresh — this is the bug")
+	}
+}
+
+// TestTrimArticles_PreservesStarred guards the data-loss bug where a
+// starred article that the user later marks read (or that gets read via
+// any path) could be wiped by trim. Star is an explicit save signal.
+func TestTrimArticles_PreservesStarred(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+
+	// 5 read articles, oldest first. Star the oldest one — it would
+	// normally be the first victim of trim.
+	for i := 0; i < 5; i++ {
+		a := newArticle(f.ID, urlN(i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		_, _ = d.UpsertArticle(a)
+	}
+	list, _ := d.ListArticles(f.ID, 10)
+	var starredID int64
+	for _, a := range list {
+		_ = d.MarkRead(a.ID)
+		if a.Title == "art0" {
+			starredID = a.ID
+			if _, err := d.ToggleStar(a.ID); err != nil {
+				t.Fatalf("ToggleStar: %v", err)
+			}
+		}
+	}
+
+	// Aggressive trim: cap=1, both cutoffs in the future. Without
+	// the star protection, art0 is the oldest read row and gets
+	// deleted first.
+	future := time.Now().UTC().Add(time.Hour)
+	if err := d.TrimArticles(f.ID, 1, future, future); err != nil {
+		t.Fatalf("TrimArticles: %v", err)
+	}
+
+	list, _ = d.ListArticles(f.ID, 10)
+	for _, a := range list {
+		if a.ID == starredID {
+			return
+		}
+	}
+	t.Fatal("starred article was deleted by trim — star must protect")
+}
+
+// TestTrimArticles_PreservesBookmarked is the read-later equivalent of
+// the star test. Bookmark is also an explicit save signal.
+func TestTrimArticles_PreservesBookmarked(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 5; i++ {
+		a := newArticle(f.ID, urlN(i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		_, _ = d.UpsertArticle(a)
+	}
+	list, _ := d.ListArticles(f.ID, 10)
+	var bookmarkedID int64
+	for _, a := range list {
+		_ = d.MarkRead(a.ID)
+		if a.Title == "art0" {
+			bookmarkedID = a.ID
+			if _, err := d.ToggleBookmark(a.ID); err != nil {
+				t.Fatalf("ToggleBookmark: %v", err)
+			}
+		}
+	}
+
+	future := time.Now().UTC().Add(time.Hour)
+	if err := d.TrimArticles(f.ID, 1, future, future); err != nil {
+		t.Fatalf("TrimArticles: %v", err)
+	}
+
+	list, _ = d.ListArticles(f.ID, 10)
+	for _, a := range list {
+		if a.ID == bookmarkedID {
+			return
+		}
+	}
+	t.Fatal("bookmarked article was deleted by trim — bookmark must protect")
+}
+
+// TestTrimArticles_PreservesRecentlyRead asserts the grace window:
+// articles read after readCutoff survive trim even if the feed is over
+// cap. Catches the user-reported issue: accidentally pressing `x`
+// shouldn't permanently destroy an article on the next sync.
+func TestTrimArticles_PreservesRecentlyRead(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 5; i++ {
+		a := newArticle(f.ID, urlN(i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		_, _ = d.UpsertArticle(a)
+	}
+	list, _ := d.ListArticles(f.ID, 10)
+	for _, a := range list {
+		_ = d.MarkRead(a.ID) // read_at ≈ time.Now()
+	}
+
+	// readCutoff in the past → all read_at values are >= readCutoff
+	// → all rows protected. fetchCutoff in the future so that guard
+	// is NOT what's saving them; we want to verify the grace alone.
+	fetchCutoff := time.Now().UTC().Add(time.Hour)
+	readCutoff := time.Now().UTC().Add(-time.Hour)
+	if err := d.TrimArticles(f.ID, 1, fetchCutoff, readCutoff); err != nil {
+		t.Fatalf("TrimArticles: %v", err)
+	}
+
+	list, _ = d.ListArticles(f.ID, 10)
+	if len(list) != 5 {
+		t.Fatalf("recently-read articles should survive grace window: got %d remaining, want 5", len(list))
 	}
 }
 

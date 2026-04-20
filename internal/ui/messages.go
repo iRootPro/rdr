@@ -98,3 +98,27 @@ type aiResultMsg struct {
 type aiErrorMsg struct {
 	err error
 }
+
+// librarySavedMsg is delivered after a URL has been inserted into the
+// Library feed via the AddURL modal. The handler refreshes lists and
+// kicks off the background full-content fetch.
+type librarySavedMsg struct {
+	articleID int64
+	url       string
+}
+
+// libraryFetchedMsg is delivered when the background readability fetch
+// for a saved URL completes. err is non-nil on failure; on success
+// title is whatever readability resolved (may still be empty).
+type libraryFetchedMsg struct {
+	articleID int64
+	title     string
+	err       error
+}
+
+// libraryDeletedMsg is delivered after a saved URL has been removed
+// from the DB. Triggers a refresh of the cross-feed cache and feeds
+// list so unread counts stay in sync.
+type libraryDeletedMsg struct {
+	articleID int64
+}

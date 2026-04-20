@@ -24,6 +24,11 @@ import (
 const (
 	userAgent            = "rdr/0.1 (+https://github.com/iRootPro/rdr)"
 	maxConcurrentFetches = 8
+	// readGracePeriod is the window during which freshly read articles
+	// survive trim, even if the feed is over its per-feed cap. Protects
+	// against accidental `x` keystrokes destroying rows the user might
+	// still want to revisit.
+	readGracePeriod = 7 * 24 * time.Hour
 )
 
 type FetchResult struct {
@@ -79,31 +84,45 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 	}
 	// Trim failure is fatal for now — there's no logger wired up, and silent
 	// swallow is worse than propagating. Revisit once Fetcher has warnings.
-	if err := f.db.TrimArticles(feed.ID, f.maxArticlesPerFeed(), fetchStart); err != nil {
+	// Articles read within readGracePeriod are protected from trim so a
+	// stray `x` keystroke doesn't permanently destroy a row before the
+	// user notices.
+	readCutoff := fetchStart.Add(-readGracePeriod)
+	if err := f.db.TrimArticles(feed.ID, f.maxArticlesPerFeed(), fetchStart, readCutoff); err != nil {
 		return FetchResult{}, fmt.Errorf("trim: %w", err)
 	}
 	return result, nil
 }
 
 func (f *Fetcher) FetchFull(ctx context.Context, articleURL string) (string, error) {
+	_, md, err := f.FetchFullWithTitle(ctx, articleURL)
+	return md, err
+}
+
+// FetchFullWithTitle fetches a URL, extracts the main article via
+// go-readability, and returns the page title alongside the Markdown
+// body. Title is whatever readability resolved (often the <title> tag
+// or first <h1>); callers should keep their own placeholder when this
+// returns an empty string.
+func (f *Fetcher) FetchFullWithTitle(ctx context.Context, articleURL string) (string, string, error) {
 	body, err := f.get(ctx, articleURL)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer body.Close()
 
 	raw, err := io.ReadAll(body)
 	if err != nil {
-		return "", fmt.Errorf("read body: %w", err)
+		return "", "", fmt.Errorf("read body: %w", err)
 	}
 
 	parsed, err := url.Parse(articleURL)
 	if err != nil {
-		return "", fmt.Errorf("parse url: %w", err)
+		return "", "", fmt.Errorf("parse url: %w", err)
 	}
 	article, err := readability.FromReader(bytes.NewReader(raw), parsed)
 	if err != nil {
-		return "", fmt.Errorf("readability: %w", err)
+		return "", "", fmt.Errorf("readability: %w", err)
 	}
 
 	conv := converter.NewConverter(
@@ -115,9 +134,9 @@ func (f *Fetcher) FetchFull(ctx context.Context, articleURL string) (string, err
 	)
 	md, err := conv.ConvertString(article.Content)
 	if err != nil {
-		return "", fmt.Errorf("html to markdown: %w", err)
+		return "", "", fmt.Errorf("html to markdown: %w", err)
 	}
-	return md, nil
+	return article.Title, md, nil
 }
 
 func (f *Fetcher) maxArticlesPerFeed() int {
@@ -138,6 +157,9 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]FetchResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list feeds: %w", err)
 	}
+	// ListFeeds already excludes system feeds (e.g. Library), so we don't
+	// need an extra filter here. Kept as a defensive comment in case the
+	// invariant changes.
 	results := make([]FetchResult, len(feeds))
 	g, gctx := errgroup.WithContext(ctx)
 	sem := make(chan struct{}, maxConcurrentFetches)

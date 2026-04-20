@@ -28,6 +28,22 @@ type Strings struct {
 	Common   CommonStrings
 	Sort     SortStrings
 	Catalog  CatalogStrings
+	Library  LibraryStrings
+}
+
+// LibraryStrings covers the synthetic "Library" feed for arbitrary
+// saved URLs (hotkey B): left-panel section label, modal prompts, and
+// status/toast text for the background fetch.
+type LibraryStrings struct {
+	SectionLabel string // left-panel section name
+	AddURLTitle  string // modal title
+	AddURLPrompt string // input prompt label
+	AddURLHint   string // footer hint inside the modal
+	Saved        string // toast on successful save
+	Fetching     string // status while fetching content
+	FetchFailed  string // toast on fetch failure
+	InvalidURL   string // toast / error when input is not a valid URL
+	Deleted      string // toast after deleting a saved URL
 }
 
 type CatalogStrings struct {
@@ -217,6 +233,8 @@ type HelpStrings struct {
 	DescGlobalZen       string
 	DescGlobalHelp      string
 	DescGlobalQuit      string
+	DescGlobalAddURL    string
+	DescDeleteLibrary   string
 }
 
 type KeysStrings struct {
@@ -255,6 +273,8 @@ type KeysStrings struct {
 	YankURL       string
 	YankMarkdown  string
 	ToggleFold    string
+	AddLibrary    string
+	DeleteLibrary string
 }
 
 type ToastsStrings struct {
@@ -380,10 +400,13 @@ type SearchStrings struct {
 	Title           string
 	PreviewTitle    string
 	NoArticles      string
+	NoArticlesHint  string
 	NoMatches       string
+	NoMatchesHint   string
 	NoSelection     string
 	ResultsFmt      string // "%d/%d results"
 	NoPreviewHint   string
+	SyntaxHint      string
 }
 
 type LinksStrings struct {
@@ -410,6 +433,7 @@ type FocusStrings struct {
 	Command  string
 	Links    string
 	Help     string
+	AddURL   string
 }
 
 type FiltersStrings struct {
@@ -587,6 +611,8 @@ var en = Strings{
 		DescGlobalZen:       "toggle zen mode",
 		DescGlobalHelp:      "toggle this help",
 		DescGlobalQuit:      "quit",
+		DescGlobalAddURL:    "save URL to Library",
+		DescDeleteLibrary:   "delete from Library",
 	},
 	Keys: KeysStrings{
 		Quit:          "quit",
@@ -624,6 +650,8 @@ var en = Strings{
 		YankURL:       "yank URL",
 		YankMarkdown:  "yank [title](url)",
 		ToggleFold:    "collapse category",
+		AddLibrary:    "save URL",
+		DeleteLibrary: "delete from Library",
 	},
 	Toasts: ToastsStrings{
 		Starred:          "★ starred",
@@ -740,13 +768,16 @@ var en = Strings{
 		HelpQuitAlias:     "Exit rdr (alias for quit)",
 	},
 	Search: SearchStrings{
-		Title:         "Search",
-		PreviewTitle:  "Preview",
-		NoArticles:    "(no articles)",
-		NoMatches:     "(no matches)",
-		NoSelection:   "(no selection)",
-		ResultsFmt:    "%d/%d results",
-		NoPreviewHint: "(no preview — press enter, then f to load full)",
+		Title:          "Search",
+		PreviewTitle:   "Preview",
+		NoArticles:     "No articles yet",
+		NoArticlesHint: "Sync feeds first — press R to refresh all",
+		NoMatches:      "No matches",
+		NoMatchesHint:  "Try a broader query or clear the input (ctrl+u)",
+		NoSelection:    "(no selection)",
+		ResultsFmt:     "%d/%d results",
+		NoPreviewHint:  "(no preview — press enter, then f to load full)",
+		SyntaxHint:     "title:foo · feed:bar · unread · starred · newer:1w · ~negate · ? for help",
 	},
 	Links: LinksStrings{
 		TitleFmt:   "Links · %d",
@@ -770,6 +801,7 @@ var en = Strings{
 		Command:  "Command",
 		Links:    "Links",
 		Help:     "Help",
+		AddURL:   "Save URL",
 	},
 	Filters: FiltersStrings{
 		All:     "all",
@@ -818,6 +850,17 @@ var en = Strings{
 		FolderThisWeek: "This Week",
 		FolderStarred:   "Starred",
 		FolderReadLater: "Read Later",
+	},
+	Library: LibraryStrings{
+		SectionLabel: "Library",
+		AddURLTitle:  "Save URL to Library",
+		AddURLPrompt: "URL:",
+		AddURLHint:   "enter to save · esc to cancel",
+		Saved:        "saved to Library",
+		Fetching:     "fetching saved URL…",
+		FetchFailed:  "failed to fetch URL",
+		InvalidURL:   "invalid URL",
+		Deleted:      "deleted from Library",
 	},
 }
 
@@ -973,6 +1016,8 @@ var ru = Strings{
 		DescGlobalZen:       "переключить zen-режим",
 		DescGlobalHelp:      "переключить справку",
 		DescGlobalQuit:      "выход",
+		DescGlobalAddURL:    "сохранить URL в библиотеку",
+		DescDeleteLibrary:   "удалить из библиотеки",
 	},
 	Keys: KeysStrings{
 		Quit:          "выход",
@@ -1010,6 +1055,8 @@ var ru = Strings{
 		YankURL:       "копировать URL",
 		YankMarkdown:  "копировать [title](url)",
 		ToggleFold:    "свернуть категорию",
+		AddLibrary:    "сохранить URL",
+		DeleteLibrary: "удалить из библиотеки",
 	},
 	Toasts: ToastsStrings{
 		Starred:          "★ со звездой",
@@ -1126,13 +1173,16 @@ var ru = Strings{
 		HelpQuitAlias:     "Выйти из rdr (псевдоним quit)",
 	},
 	Search: SearchStrings{
-		Title:         "Поиск",
-		PreviewTitle:  "Превью",
-		NoArticles:    "(нет статей)",
-		NoMatches:     "(нет совпадений)",
-		NoSelection:   "(нет выбора)",
-		ResultsFmt:    "результатов: %d/%d",
-		NoPreviewHint: "(нет превью — нажмите enter, затем f для полной)",
+		Title:          "Поиск",
+		PreviewTitle:   "Превью",
+		NoArticles:     "Пока нет статей",
+		NoArticlesHint: "Сначала синхронизируйте ленты — нажмите R",
+		NoMatches:      "Ничего не найдено",
+		NoMatchesHint:  "Попробуйте упростить запрос или очистите поле (ctrl+u)",
+		NoSelection:    "(нет выбора)",
+		ResultsFmt:     "результатов: %d/%d",
+		NoPreviewHint:  "(нет превью — нажмите enter, затем f для полной)",
+		SyntaxHint:     "title:foo · feed:bar · unread · starred · newer:1w · ~negate · ? для справки",
 	},
 	Links: LinksStrings{
 		TitleFmt:   "Ссылки · %d",
@@ -1156,6 +1206,7 @@ var ru = Strings{
 		Command:  "Команда",
 		Links:    "Ссылки",
 		Help:     "Справка",
+		AddURL:   "Сохранить URL",
 	},
 	Filters: FiltersStrings{
 		All:     "все",
@@ -1204,6 +1255,17 @@ var ru = Strings{
 		FolderThisWeek: "За неделю",
 		FolderStarred:   "Избранные",
 		FolderReadLater: "Почитать позже",
+	},
+	Library: LibraryStrings{
+		SectionLabel: "Библиотека",
+		AddURLTitle:  "Сохранить URL в библиотеку",
+		AddURLPrompt: "URL:",
+		AddURLHint:   "enter сохранить · esc отмена",
+		Saved:        "сохранено в библиотеку",
+		Fetching:     "загрузка сохранённого URL…",
+		FetchFailed:  "не удалось загрузить URL",
+		InvalidURL:   "неверный URL",
+		Deleted:      "удалено из библиотеки",
 	},
 }
 

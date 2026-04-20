@@ -22,6 +22,7 @@ Vim-style navigation, full article reading, smart folders, query language search
 - Smart folders (saved search queries)
 - Search with query language (`title:rust unread newer:1w`)
 - Read Later queue — separate from Starred, for articles to read later (`b`)
+- Library — save arbitrary URLs outside RSS (`B`, pre-filled from clipboard)
 - Batch operations: mark read, star, bookmark, copy by query
 - OPML import and export
 - 4 themes: Dark (Tokyo Night), Light (Catppuccin Latte), Catppuccin Mocha, Rose Pine
@@ -121,6 +122,43 @@ after_sync_commands:
 
 Feeds and smart folders from the config are synced into the database on every launch. All other settings (language, theme, sort, preview) are stored in SQLite and changed via the UI (`s`).
 
+## Library — saving arbitrary URLs
+
+Library turns rdr from a strict RSS reader into a personal reading library. If you stumbled on an interesting article in your browser or in chat, you can save it and read it in the same place as your RSS feeds, with all the same features (full-text reading, star, bookmark, search, AI translate and summarize).
+
+The **Library** section appears at the top of the left pane, above smart folders and categories.
+
+### How it differs from "Read Later" (`b`)
+
+- `b` (Read Later) — a flag on an existing article from a subscribed RSS feed. The article stays in its feed, just gets a label.
+- Library (`B`) — a separate collection of URLs added manually. The source can be anything, not necessarily RSS.
+
+### How to use
+
+1. Copy a URL to the clipboard (or just have one in mind).
+2. Press `B` in any pane (feeds, articles, reader).
+3. A modal opens with the URL field pre-filled — if the clipboard had a URL, it's already there.
+4. `Enter` to save, `esc` to cancel.
+5. The entry appears in Library immediately with a placeholder title (host from the URL). In the background, readability extraction kicks off — the title and body update in 1-3 seconds.
+6. Open Library in the left pane → select the article → `enter` to read.
+
+### Hotkeys
+
+| Key | Action |
+|-----|--------|
+| `B` | Open the Add URL modal (pre-filled from clipboard) |
+| `D` | Delete an article from Library (only when the Library section is selected) |
+| `f` | Re-fetch full content (if the initial fetch failed) |
+
+All other operations (`x`, `m`, `b`, `y`, `o`, `t`, `Ctrl+s`) work the same as for regular RSS articles.
+
+### Technical notes
+
+- Deduplication by URL: saving the same URL again updates the title and body but preserves stars/bookmarks/read state.
+- Library does not participate in `R` (sync all) and is not shown in the feeds settings.
+- OPML export skips the Library section.
+- Library entries are exempt from the automatic old-article cleanup (`TrimArticles`).
+
 ## Navigation
 
 ### Global Keys
@@ -151,6 +189,8 @@ Feeds and smart folders from the config are synced into the database on every la
 | `X` | Mark all read |
 | `m` | Toggle star |
 | `b` | Read later (bookmark) |
+| `B` | Save URL to Library (pre-filled from clipboard) |
+| `D` | Delete from Library (only when Library is selected) |
 | `n` | Next unread |
 | `y` | Copy URL |
 | `Y` | Copy as markdown link |

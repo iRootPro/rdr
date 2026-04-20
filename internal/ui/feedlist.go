@@ -43,29 +43,29 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		nameCellW = 1
 	}
 
-	// Visual break: a subtle separator sits between the smart-folders
-	// section and the first category (or the first uncategorised feed
-	// when there are no categories). That groups the pane into two
-	// obvious sections without adding noise inside either.
-	firstBreakIdx := -1
-	hasFolder := false
-	for i, e := range entries {
-		if e.Kind == entryFolder {
-			hasFolder = true
-			continue
-		}
-		if firstBreakIdx < 0 {
-			firstBreakIdx = i
-			break
+	// Visual breaks: subtle separators sit between sections (Library →
+	// smart folders → categories/feeds) so the user can tell them apart
+	// at a glance. Sections are derived from entry Kind: entryLibrary,
+	// entryFolder, then everything else (categories + feeds).
+	sectionOf := func(k entryKind) int {
+		switch k {
+		case entryLibrary:
+			return 0
+		case entryFolder:
+			return 1
+		default:
+			return 2
 		}
 	}
-	showSeparator := hasFolder && firstBreakIdx > 0
+	separatorBefore := make(map[int]bool, 2)
+	for i := 1; i < len(entries); i++ {
+		if sectionOf(entries[i].Kind) != sectionOf(entries[i-1].Kind) {
+			separatorBefore[i] = true
+		}
+	}
 
 	rowsBudget := listVisibleRows(height)
-	itemBudget := rowsBudget
-	if showSeparator {
-		itemBudget--
-	}
+	itemBudget := rowsBudget - len(separatorBefore)
 	if itemBudget < 1 {
 		itemBudget = 1
 	}
@@ -75,7 +75,7 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 	for i := start; i < end; i++ {
 		e := entries[i]
 
-		if showSeparator && i == firstBreakIdx {
+		if separatorBefore[i] {
 			sep := lipgloss.NewStyle().
 				Foreground(colorBorder).
 				Background(colorBG).
@@ -104,6 +104,9 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		var icon string
 		iconCells := 0
 		switch e.Kind {
+		case entryLibrary:
+			icon = lipgloss.NewStyle().Foreground(colorAccent).Background(rowBG).Render("\U000f02ba ")
+			iconCells = 2
 		case entryFolder:
 			icon = lipgloss.NewStyle().Foreground(colorTeal).Background(rowBG).Render("◉ ")
 			iconCells = 2

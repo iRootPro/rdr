@@ -71,7 +71,7 @@ func renderHelpScreen(m Model, width, height int) string {
 		innerW = 30
 	}
 
-	sections := fullHelpFor(m.helpPrev, m.tr)
+	sections := fullHelpFor(m.helpPrev, m.tr, m.currentEntryIsLibrary())
 
 	var b strings.Builder
 	b.WriteString(helpScreenTitle.Render(fmt.Sprintf(m.tr.Help.TitleFmt, focusLabel(m.helpPrev, m.tr))))

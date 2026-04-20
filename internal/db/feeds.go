@@ -17,6 +17,59 @@ type Feed struct {
 	UnreadCount int
 }
 
+// LibraryFeedURL is the sentinel URL of the system feed that owns
+// articles saved by the user via the Library modal (hotkey B). Excluded
+// from user-facing lists, sync, and OPML.
+const (
+	LibraryFeedURL  = "internal://library"
+	LibraryFeedName = "Library"
+)
+
+// IsSystemFeed reports whether a feed is internal (e.g. Library) and
+// should be hidden from sync, OPML export, and the Settings > Feeds list.
+func IsSystemFeed(url string) bool {
+	return url == LibraryFeedURL
+}
+
+// LibraryUnreadCount returns the number of unread saved URLs in the
+// Library feed. Cheap enough to call on every feed-list refresh.
+func (d *DB) LibraryUnreadCount() (int, error) {
+	var n int
+	err := d.sql.QueryRow(`
+		SELECT COUNT(*) FROM articles a
+		JOIN feeds f ON f.id = a.feed_id
+		WHERE f.url = ? AND a.read_at IS NULL
+	`, LibraryFeedURL).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("library unread count: %w", err)
+	}
+	return n, nil
+}
+
+// GetLibraryFeedID returns the ID of the system Library feed. Migration
+// 007 seeds this row, so a missing row would only happen if a user
+// deleted it manually — re-insert in that case.
+func (d *DB) GetLibraryFeedID() (int64, error) {
+	var id int64
+	err := d.sql.QueryRow(
+		`SELECT id FROM feeds WHERE url = ?`, LibraryFeedURL,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		res, ierr := d.sql.Exec(
+			`INSERT INTO feeds (name, url, position, category) VALUES (?, ?, -1, '')`,
+			LibraryFeedName, LibraryFeedURL,
+		)
+		if ierr != nil {
+			return 0, fmt.Errorf("seed library feed: %w", ierr)
+		}
+		return res.LastInsertId()
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get library feed: %w", err)
+	}
+	return id, nil
+}
+
 // UpsertFeed inserts or updates a feed by URL. Category is overwritten
 // on conflict so yaml edits take effect on next sync.
 func (d *DB) UpsertFeed(name, url, category string) (Feed, error) {
@@ -63,9 +116,10 @@ func (d *DB) ListFeeds() ([]Feed, error) {
 		       COUNT(CASE WHEN a.id IS NOT NULL AND a.read_at IS NULL THEN 1 END)
 		FROM feeds f
 		LEFT JOIN articles a ON a.feed_id = f.id
+		WHERE f.url != ?
 		GROUP BY f.id
 		ORDER BY f.position ASC, f.id ASC
-	`)
+	`, LibraryFeedURL)
 	if err != nil {
 		return nil, err
 	}

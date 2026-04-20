@@ -90,14 +90,16 @@ func recomputeMatches(m *Model) {
 
 // searchListRows computes how many result rows fit in the search pane given
 // the current terminal height. Mirrors the geometry used in renderSearchLeft
-// so Update and View agree on what is visible.
+// so Update and View agree on what is visible. Layout overhead = 8 rows:
+// title (2) + input box (2: input + border bottom) + hint (1) + blank (1) +
+// blank-before-count (1) + count (1).
 func searchListRows(m Model) int {
 	helpH := lipgloss.Height(m.helpView())
 	innerH := m.height - 1 - helpH - 2
-	if innerH < 6 {
-		innerH = 6
+	if innerH < 8 {
+		innerH = 8
 	}
-	rows := innerH - 6
+	rows := innerH - 8
 	if rows < 1 {
 		rows = 1
 	}
@@ -207,6 +209,9 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) openSearchSelection() (tea.Model, tea.Cmd) {
+	if strings.TrimSpace(m.searchInput.Value()) == "" {
+		return m, nil
+	}
 	if len(m.searchMatches) == 0 {
 		return m, nil
 	}
@@ -264,40 +269,88 @@ func renderSearch(m Model, width, height int) string {
 func renderSearchLeft(m Model, width, height int) string {
 	// Fixed inner layout (so nothing jumps as user navigates):
 	//   title block (paneTitle → 2 rows: title + bottom padding)
-	//   input row (1 row)
+	//   input box (2 rows: input + border bottom)
+	//   hint row (1 row: syntax cheatsheet or parser error)
 	//   blank (1 row)
 	//   list area (listRows, always padded)
 	//   blank (1 row)
 	//   count row (1 row)
-	// Total: listRows + 6. Pane border adds 2 more.
+	// Total: listRows + 8. Pane border adds 2 more.
 	innerH := height - 2
-	if innerH < 6 {
-		innerH = 6
+	if innerH < 8 {
+		innerH = 8
 	}
-	listRows := innerH - 6
+	listRows := innerH - 8
 	if listRows < 1 {
 		listRows = 1
+	}
+
+	// Set Width on the textinput before View(). When Width is zero, bubbles
+	// renders a zero-width visible window and typed characters scroll
+	// horizontally out of view — that's the "input not visible" bug.
+	inputBoxW := width - 4
+	if inputBoxW < 12 {
+		inputBoxW = 12
+	}
+	inputW := inputBoxW - lipgloss.Width(m.searchInput.Prompt) - 2
+	if inputW < 8 {
+		inputW = 8
+	}
+	m.searchInput.Width = inputW
+
+	inputBox := lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderBottom(true).
+		BorderForeground(colorAccent).
+		Background(colorBG).
+		Padding(0, 1).
+		Width(inputBoxW).
+		Render(m.searchInput.View())
+
+	var hintLine string
+	if m.searchErr != nil {
+		hintLine = errStyle.Render(truncate("! "+m.searchErr.Error(), width-4))
+	} else {
+		hintLine = searchHint.Render(truncate(m.tr.Search.SyntaxHint, width-4))
 	}
 
 	var b strings.Builder
 	b.WriteString(searchTitle.Render(m.tr.Search.Title))
 	b.WriteString("\n")
-	b.WriteString(m.searchInput.View())
+	b.WriteString(inputBox)
+	b.WriteString("\n")
+	b.WriteString(hintLine)
 	b.WriteString("\n\n")
 
-	titleW := width - 16
-	if titleW < 1 {
-		titleW = 1
+	// Geometry of one result row inside the pane (width = pane content width):
+	//   prefix (2) + title (titleW) + gap (2) + feedTag (≤12) = leftCol slot
+	//   leftCol slot must fit inside Width(width-16) without wrapping, else
+	//   long titles get re-flowed onto a 2nd line and the whole list area
+	//   overflows listRows — pushing the pane title and input out of view.
+	// → leftCol slot ≤ width-16  ⇒  titleW ≤ width-32.
+	titleW := width - 32
+	if titleW < 5 {
+		titleW = 5
 	}
+
+	emptyTitle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
+	emptyHint := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true)
 
 	switch {
 	case len(m.searchAll) == 0:
-		b.WriteString(readStyle.Render(m.tr.Search.NoArticles))
-		// Pad the remaining list rows so count stays at bottom.
-		b.WriteString(strings.Repeat("\n", listRows-1))
+		body := lipgloss.JoinVertical(lipgloss.Center,
+			emptyTitle.Render(m.tr.Search.NoArticles),
+			emptyHint.Render(m.tr.Search.NoArticlesHint),
+		)
+		b.WriteString(lipgloss.Place(width-4, listRows, lipgloss.Center, lipgloss.Center, body, lipgloss.WithWhitespaceBackground(colorBG)))
+		b.WriteString("\n")
 	case len(m.searchMatches) == 0:
-		b.WriteString(readStyle.Render(m.tr.Search.NoMatches))
-		b.WriteString(strings.Repeat("\n", listRows-1))
+		body := lipgloss.JoinVertical(lipgloss.Center,
+			emptyTitle.Render(m.tr.Search.NoMatches),
+			emptyHint.Render(m.tr.Search.NoMatchesHint),
+		)
+		b.WriteString(lipgloss.Place(width-4, listRows, lipgloss.Center, lipgloss.Center, body, lipgloss.WithWhitespaceBackground(colorBG)))
+		b.WriteString("\n")
 	default:
 		start := m.searchScroll
 		if start < 0 {
@@ -307,6 +360,7 @@ func renderSearchLeft(m Model, width, height int) string {
 		if end > len(m.searchMatches) {
 			end = len(m.searchMatches)
 		}
+		hasQuery := strings.TrimSpace(m.searchInput.Value()) != ""
 		rendered := 0
 		for i := start; i < end; i++ {
 			item := m.searchAll[m.searchMatches[i]]
@@ -315,14 +369,14 @@ func renderSearchLeft(m Model, width, height int) string {
 			if item.ReadAt != nil {
 				style = readStyle
 			}
-			if i == m.searchSel {
+			if hasQuery && i == m.searchSel {
 				prefix = "› "
 				style = itemSelected
 			}
 			feedTag := searchFeedTag.Render(truncate(item.FeedName, 12))
 			title := style.Render(prefix + truncate(item.Title, titleW))
 			when := timeAgoStyle.Render(timeAgo(item.PublishedAt, m.tr))
-			leftCol := lipgloss.NewStyle().Width(width - 16).Render(title + "  " + feedTag)
+			leftCol := lipgloss.NewStyle().Width(width - 16).MaxWidth(width - 16).Inline(true).Render(title + "  " + feedTag)
 			line := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, when)
 			b.WriteString(line)
 			b.WriteString("\n")
@@ -335,11 +389,7 @@ func renderSearchLeft(m Model, width, height int) string {
 	}
 
 	b.WriteString("\n")
-	if m.searchErr != nil {
-		b.WriteString(errStyle.Render("! " + m.searchErr.Error()))
-	} else {
-		b.WriteString(searchCount.Render(fmt.Sprintf(m.tr.Search.ResultsFmt, len(m.searchMatches), len(m.searchAll))))
-	}
+	b.WriteString(searchCount.Render(fmt.Sprintf(m.tr.Search.ResultsFmt, len(m.searchMatches), len(m.searchAll))))
 
 	c := fillBackground(b.String(), width-4)
 	return paneActive.Width(width - 2).Height(innerH).Render(c)
@@ -367,7 +417,8 @@ func renderSearchPreview(m Model, width, height int) string {
 	b.WriteString(searchTitle.Render(m.tr.Search.PreviewTitle))
 	b.WriteString("\n")
 
-	hasSelection := len(m.searchMatches) > 0 && m.searchSel >= 0 && m.searchSel < len(m.searchMatches)
+	hasQuery := strings.TrimSpace(m.searchInput.Value()) != ""
+	hasSelection := hasQuery && len(m.searchMatches) > 0 && m.searchSel >= 0 && m.searchSel < len(m.searchMatches)
 	if !hasSelection {
 		b.WriteString(searchHint.Render(m.tr.Search.NoSelection))
 		b.WriteString(strings.Repeat("\n", innerH-3))
