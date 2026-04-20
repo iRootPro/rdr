@@ -17,9 +17,10 @@ import (
 
 	"github.com/iRootPro/rdr/internal/ai"
 	"github.com/iRootPro/rdr/internal/db"
-	"github.com/iRootPro/rdr/internal/rlog"
 	"github.com/iRootPro/rdr/internal/feed"
 	"github.com/iRootPro/rdr/internal/i18n"
+	"github.com/iRootPro/rdr/internal/kitty"
+	"github.com/iRootPro/rdr/internal/rlog"
 )
 
 // entryKind tags a row in the unified feed list: smart folder, category
@@ -266,6 +267,15 @@ type Model struct {
 	sortField   string // "date" or "title"
 	sortReverse bool
 
+	// Reader inline-image state. readerImgURLs holds the ordered unique
+	// image URLs found in the current article (index = placeholder block
+	// index in the rendered content). readerImgPlacements is the parallel
+	// slice of Kitty placements — same index, filled in once the image
+	// is downloaded, PNG-converted and transmitted to the terminal RAM.
+	// Empty/shorter slice ⇒ those images render as plain markdown text.
+	readerImgURLs       []string
+	readerImgPlacements []kitty.Placement
+
 	status string
 	err    error
 }
@@ -379,7 +389,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 		}
 		return m, nil
 
@@ -635,6 +645,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusFeeds
 				return m, nil
 			case focusReader:
+				// Back out of reader: drop any image placements so no
+				// ghosts show up over the article list. Transmitted
+				// image data stays in Kitty RAM — cheap to re-use on
+				// re-open.
+				deletePlacements(m.readerImgPlacements)
+				m.readerImgURLs = nil
+				m.readerImgPlacements = nil
 				m.focus = focusArticles
 				m.readerArt = nil
 				cmds := []tea.Cmd{loadFeedsCmd(m.db)}
@@ -955,9 +972,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.readerArt.CachedAt = &now
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 			m.reader.GotoTop()
+			if cmd := m.maybePrepareImagesCmd(); cmd != nil {
+				return m, cmd
+			}
 		}
+		return m, nil
+
+	case imagesReadyMsg:
+		// Discard stale results: if user switched articles while the
+		// download was in flight, abandon the placements (and leave the
+		// transmitted images in Kitty's RAM — they're small and get
+		// overwritten the next time the same ID is transmitted).
+		if m.readerArt == nil || m.readerArt.ID != msg.articleID {
+			deletePlacements(msg.placements)
+			return m, nil
+		}
+		m.readerImgURLs = msg.urls
+		m.readerImgPlacements = msg.placements
+		feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
+		feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
+		m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 		return m, nil
 
 	case aiResultMsg:
@@ -971,7 +1007,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.readerArt.CachedBody = header + content
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 			m.reader.GotoTop()
 		}
 		label := m.tr.Reader.Translated
@@ -1418,7 +1454,7 @@ func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
 		if m.focus == focusReader && m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 		}
 		label := m.tr.Status.ImagesOff
 		if m.showImages {
@@ -1818,18 +1854,32 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 
 func (m Model) openReader() (tea.Model, tea.Cmd) {
 	a := m.articles[m.selArt]
+	// Starting a new article: clean up any placements from the previous
+	// one so old images don't leak into the new reader frame, and reset
+	// the image-state slices so placeholders won't be emitted before new
+	// images are re-prepared.
+	deletePlacements(m.readerImgPlacements)
+	m.readerImgURLs = nil
+	m.readerImgPlacements = nil
 	m.readerArt = &a
 	m.focus = focusReader
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
 	feedName := readerFeedName(m.feeds, a.FeedID)
 	feedURL := readerFeedURL(m.feeds, a.FeedID)
-	m.reader.SetContent(buildReaderContent(a, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+	m.reader.SetContent(buildReaderContent(a, feedName, feedURL, m.reader.Width, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 	m.reader.GotoTop()
+	var cmds []tea.Cmd
 	if a.ReadAt == nil {
-		return m, markReadCmd(m.db, a.ID)
+		cmds = append(cmds, markReadCmd(m.db, a.ID))
 	}
-	return m, nil
+	if cmd := m.maybePrepareImagesCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // readerJump advances selArt by dir within the current article list and
@@ -1854,15 +1904,26 @@ func (m Model) readerJump(dir int) (tea.Model, tea.Cmd) {
 	}
 	m.selArt = target
 	a := m.articles[target]
+	// New article: drop placements from the previous one.
+	deletePlacements(m.readerImgPlacements)
+	m.readerImgURLs = nil
+	m.readerImgPlacements = nil
 	m.readerArt = &a
 	feedName := readerFeedName(m.feeds, a.FeedID)
 	feedURL := readerFeedURL(m.feeds, a.FeedID)
-	m.reader.SetContent(buildReaderContent(a, feedName, feedURL, m.reader.Width, m.showImages, m.tr))
+	m.reader.SetContent(buildReaderContent(a, feedName, feedURL, m.reader.Width, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 	m.reader.GotoTop()
+	var cmds []tea.Cmd
 	if a.ReadAt == nil {
-		return m, markReadCmd(m.db, a.ID)
+		cmds = append(cmds, markReadCmd(m.db, a.ID))
 	}
-	return m, nil
+	if cmd := m.maybePrepareImagesCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) moveDown() (tea.Model, tea.Cmd) {
@@ -2064,6 +2125,11 @@ func (m Model) View() string {
 			status = paintLineBG(status+"  "+errStyle.Render("! "+m.err.Error()), m.width)
 		}
 		body := paneActive.Width(m.width - 2).Height(m.height - 2 - helpH).Render(m.reader.View())
+		// Post-process the rendered reader body: swap placeholder-block
+		// first-rows for actual Kitty `a=p` APCs. This happens AFTER all
+		// lipgloss width/padding passes so the escape bytes are not torn
+		// apart by reflow. See internal/kitty for the marker protocol.
+		body = kitty.ReplacePlaceholders(body, m.readerImgPlacements)
 		frame := lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 		return frame
 	}

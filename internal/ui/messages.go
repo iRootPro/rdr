@@ -3,7 +3,22 @@ package ui
 import (
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
+	"github.com/iRootPro/rdr/internal/kitty"
 )
+
+// imagesReadyMsg signals that article images have been downloaded,
+// PNG-converted, and uploaded to the terminal's Kitty image store via
+// TransmitOnly. The model pairs URLs with placements in order and
+// triggers a reader-content rebuild so placeholder blocks replace
+// `![alt](url)` references.
+//
+// articleID is included so a stale result (user switched articles mid-
+// download) can be discarded.
+type imagesReadyMsg struct {
+	articleID  int64
+	urls       []string
+	placements []kitty.Placement
+}
 
 type feedsLoadedMsg struct {
 	feeds []db.Feed

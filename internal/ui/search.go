@@ -234,7 +234,7 @@ func (m Model) openSearchSelection() (tea.Model, tea.Cmd) {
 	m.focus = focusReader
 	m.reader.Width = m.width - 4
 	m.reader.Height = m.height - 2
-	m.reader.SetContent(buildReaderContent(art, item.FeedName, "", m.reader.Width-4, m.showImages, m.tr))
+	m.reader.SetContent(buildReaderContent(art, item.FeedName, "", m.reader.Width-4, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
 	m.reader.GotoTop()
 
 	m.searchInput.Blur()

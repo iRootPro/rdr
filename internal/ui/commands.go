@@ -482,7 +482,19 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 		if m.focus == focusReader && m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
-			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width-4, m.showImages, m.tr))
+			m.reader.SetContent(buildReaderContent(*m.readerArt, feedName, feedURL, m.reader.Width-4, m.showImages, m.tr, m.readerImgURLs, m.readerImgPlacements))
+			// Toggling on: kick off inline-image fetch. Toggling off:
+			// drop any placements so they don't render on subsequent
+			// frames.
+			if m.showImages {
+				if cmd := m.maybePrepareImagesCmd(); cmd != nil {
+					return m, cmd
+				}
+			} else {
+				deletePlacements(m.readerImgPlacements)
+				m.readerImgURLs = nil
+				m.readerImgPlacements = nil
+			}
 		}
 		return m, nil
 

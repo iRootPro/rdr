@@ -13,6 +13,7 @@ import (
 
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/i18n"
+	"github.com/iRootPro/rdr/internal/kitty"
 )
 
 // readerMaxContentWidth caps the reader body so long articles stay
@@ -65,19 +66,24 @@ func rebuildReaderStyles() {
 }
 
 // buildReaderContent is the entry point used by the model. It delegates
-// to layoutReader and keeps the original signature so every call-site in
-// model.go / search.go stays unchanged.
-func buildReaderContent(a db.Article, feedName, feedURL string, width int, showImages bool, tr *i18n.Strings) string {
+// to layoutReader. `imgURLs` and `placements` are parallel slices (same
+// length, same order) describing images that have already been fetched
+// and transmitted to the terminal; the renderer substitutes each
+// `![alt](url)` in the article body with a placeholder-fill block whose
+// geometry matches the placement. Empty slices ⇒ images render as the
+// original markdown text (the normal state before images finish loading
+// or when showImages is false).
+func buildReaderContent(a db.Article, feedName, feedURL string, width int, showImages bool, tr *i18n.Strings, imgURLs []string, placements []kitty.Placement) string {
 	if tr == nil {
 		tr = i18n.For(i18n.EN)
 	}
-	return layoutReader(a, feedName, feedURL, width, showImages, tr)
+	return layoutReader(a, feedName, feedURL, width, showImages, tr, imgURLs, placements)
 }
 
 // layoutReader renders the full reader string and, when the available
 // outer width exceeds readerMaxContentWidth, horizontally centres it by
 // left-padding every line. Narrow terminals fall through untouched.
-func layoutReader(a db.Article, feedName, feedURL string, outerWidth int, showImages bool, tr *i18n.Strings) string {
+func layoutReader(a db.Article, feedName, feedURL string, outerWidth int, showImages bool, tr *i18n.Strings, imgURLs []string, placements []kitty.Placement) string {
 	contentW := outerWidth
 	if contentW > readerMaxContentWidth {
 		contentW = readerMaxContentWidth
@@ -86,7 +92,7 @@ func layoutReader(a db.Article, feedName, feedURL string, outerWidth int, showIm
 		contentW = 20
 	}
 
-	body := renderReaderBody(a, feedName, feedURL, contentW, showImages, tr)
+	body := renderReaderBody(a, feedName, feedURL, contentW, showImages, tr, imgURLs, placements)
 
 	if outerWidth > contentW {
 		indent := (outerWidth - contentW) / 2
@@ -118,7 +124,7 @@ func fillBackground(content string, width int) string {
 // renderReaderBody builds the reader content at a fixed content width.
 // All typography decisions live here so layoutReader can stay a thin
 // centring wrapper.
-func renderReaderBody(a db.Article, feedName, feedURL string, contentW int, showImages bool, tr *i18n.Strings) string {
+func renderReaderBody(a db.Article, feedName, feedURL string, contentW int, showImages bool, tr *i18n.Strings, imgURLs []string, placements []kitty.Placement) string {
 	if tr == nil {
 		tr = i18n.For(i18n.EN)
 	}
@@ -169,7 +175,8 @@ func renderReaderBody(a db.Article, feedName, feedURL string, contentW int, show
 	//      (HN-style stubs where Content is just metadata).
 	switch {
 	case a.CachedBody != "":
-		md := sanitizeArticleMarkdown(a.CachedBody, showImages)
+		md := substituteImages(a.CachedBody, imgURLs, placements)
+		md = sanitizeArticleMarkdown(md, showImages)
 		if rendered, err := renderMarkdown(md, contentW); err == nil {
 			b.WriteString(rendered)
 		} else {
@@ -285,6 +292,49 @@ var (
 	// Collapse 3+ consecutive newlines down to a paragraph break.
 	reExtraBlankLines = regexp.MustCompile(`\n{3,}`)
 )
+
+// reMarkdownImageCapture captures the URL in `![alt](url)` syntax.
+// Separate from reMarkdownImage (which matches the whole form for
+// stripping) to avoid mangling the existing strip path.
+var reMarkdownImageCapture = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)`)
+
+// substituteImages replaces each `![alt](url)` in the markdown with a
+// placeholder-fill block sized to the corresponding kitty.Placement. The
+// block is bracketed by blank lines so glamour treats it as its own
+// paragraph and doesn't try to reflow its grid. URLs that aren't in the
+// imgURLs slice (images we haven't downloaded yet, or foreign references)
+// are left as markdown text — they'll render as `alt` through glamour.
+//
+// imgURLs and placements are parallel slices: imgURLs[i] is the URL that
+// produced placements[i]. The index `i` is also baked into the
+// placeholder's first-cell marker rune so the post-processor can pair
+// the two back up after lipgloss has finished reflowing the frame.
+func substituteImages(md string, imgURLs []string, placements []kitty.Placement) string {
+	if len(placements) == 0 || len(imgURLs) != len(placements) {
+		return md
+	}
+	urlIdx := make(map[string]int, len(imgURLs))
+	for i, u := range imgURLs {
+		urlIdx[u] = i
+	}
+	return reMarkdownImageCapture.ReplaceAllStringFunc(md, func(match string) string {
+		m := reMarkdownImageCapture.FindStringSubmatch(match)
+		if len(m) < 2 {
+			return match
+		}
+		i, ok := urlIdx[m[1]]
+		if !ok || i >= len(placements) {
+			return match
+		}
+		p := placements[i]
+		if p.Cols <= 0 || p.Rows <= 0 {
+			return match
+		}
+		// Isolate the block from surrounding text with blank lines so
+		// glamour/reflow does not try to wrap it inside a paragraph.
+		return "\n\n" + kitty.PlaceholderFill(i, p.Cols, p.Rows) + "\n"
+	})
+}
 
 // sanitizeArticleMarkdown cleans up markdown for reader rendering. When
 // showImages is false, all image syntax and bare image URLs are removed.
