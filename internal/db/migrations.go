@@ -75,4 +75,13 @@ var migrations = []string{
 	ALTER TABLE articles ADD COLUMN bookmarked_at DATETIME;
 	CREATE INDEX idx_articles_bookmarked_at ON articles(bookmarked_at) WHERE bookmarked_at IS NOT NULL;
 	`,
+	// 007: Library system feed for arbitrary saved URLs. Sentinel URL
+	// 'internal://library' lets us tell user-subscribed feeds apart from
+	// this one in ListFeeds / sync / OPML export. position=-1 keeps it
+	// out of the user-position sequence so UpsertFeed's MAX(position)+1
+	// stays consistent.
+	`
+	INSERT OR IGNORE INTO feeds (name, url, position, category)
+	VALUES ('Library', 'internal://library', -1, '');
+	`,
 }

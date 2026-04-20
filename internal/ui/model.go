@@ -30,6 +30,7 @@ const (
 	entryFolder entryKind = iota
 	entryCategory
 	entryFeed
+	entryLibrary
 )
 
 // feedEntry is a single row in the Feeds pane. May be a smart folder
@@ -68,6 +69,7 @@ const (
 	focusCatalog
 	focusLangPicker
 	focusLog
+	focusAddURL
 )
 
 type settingsMode int
@@ -246,6 +248,13 @@ type Model struct {
 	commandPrev    focus
 	commandSuggIdx int
 
+	// Library: synthetic feed for arbitrary URLs saved via hotkey B.
+	// addURLInput is the modal text field; addURLPrev remembers which
+	// pane to return to on save/cancel.
+	libraryFeedID int64
+	addURLInput   textinput.Model
+	addURLPrev    focus
+
 	// Command history (vim-style :<prev command>). historyPos: -1 = not
 	// browsing, else index into commandHistory (0 = most recent). When the
 	// user starts browsing we stash the partial input in historyStash so
@@ -286,6 +295,13 @@ func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, ref
 	ci.Prompt = ":"
 	ci.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
 
+	addURL := textinput.New()
+	addURL.CharLimit = 2048
+	addURL.Prompt = "› "
+	addURL.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+
+	libraryFeedID, _ := database.GetLibraryFeedID()
+
 	tr := i18n.For(lang)
 
 	return Model{
@@ -309,6 +325,8 @@ func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, ref
 		settingsInput:     ti,
 		searchInput:       si,
 		commandInput:      ci,
+		addURLInput:       addURL,
+		libraryFeedID:     libraryFeedID,
 		commandHistory:    readHistoryFile(home),
 		historyPos:        -1,
 		showImages:        showImages,
@@ -351,6 +369,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.reader.Width = m.width - 4
 		m.reader.Height = m.height - 2
+		// Safety-net: keep textinputs sized so first focusSearch render isn't
+		// stuck with Width=0 (which renders an invisible input window).
+		searchInputW := (m.width / 2) - 8
+		if searchInputW < 8 {
+			searchInputW = 8
+		}
+		m.searchInput.Width = searchInputW
 		if m.readerArt != nil {
 			feedName := readerFeedName(m.feeds, m.readerArt.FeedID)
 			feedURL := readerFeedURL(m.feeds, m.readerArt.FeedID)
@@ -386,6 +411,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusFeeds
 			}
 			return m, nil
+		}
+		if m.focus == focusAddURL {
+			return m.updateAddURL(msg)
 		}
 		// Digit prefixes accumulate vim-style counts for the next movement
 		// key. Only consumes bare digits (no modifier). 0 alone is ignored
@@ -424,6 +452,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.toggleStarOnCurrent()
 		case key.Matches(msg, m.keys.Bookmark):
 			return m.toggleBookmarkOnCurrent()
+		case key.Matches(msg, m.keys.AddLibrary):
+			if m.focus == focusFeeds || m.focus == focusArticles || m.focus == focusReader {
+				return m.openAddURLModal()
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.DeleteLibrary):
+			return m.deleteCurrentLibraryArticle()
 		case key.Matches(msg, m.keys.FilterAll):
 			return m.switchFilter(filterAll)
 		case key.Matches(msg, m.keys.FilterUnread):
@@ -728,7 +763,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case articlesLoadedMsg:
 		m.err = nil
 		e, ok := m.currentEntry()
-		if ok && e.Kind == entryFeed && e.FeedID == msg.feedID {
+		if ok && (e.Kind == entryFeed || e.Kind == entryLibrary) && e.FeedID == msg.feedID {
 			m.articles = msg.articles
 			applySort(m.articles, m.sortField, m.sortReverse)
 			if m.selArt >= len(m.articles) {
@@ -766,6 +801,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.allArticles = msg.articles
 		m.refreshFolderCounts()
 		return m, nil
+
+	case librarySavedMsg:
+		// Synchronous insert is done; refresh visible lists, fire the
+		// background readability fetch, and surface a quick toast. The
+		// fetched-msg handler will replace this toast with the result.
+		cmds := []tea.Cmd{
+			loadFeedsCmd(m.db),
+			loadAllArticlesCmd(m.db),
+			fetchLibraryArticleCmd(m.fetcher, m.db, msg.articleID, msg.url),
+			m.showToast(m.tr.Library.Fetching),
+		}
+		if c := m.loadCurrentCmd(); c != nil {
+			cmds = append(cmds, c)
+		}
+		return m, tea.Batch(cmds...)
+
+	case libraryFetchedMsg:
+		if msg.err != nil {
+			return m, m.showToast(m.tr.Library.FetchFailed)
+		}
+		cmds := []tea.Cmd{
+			loadAllArticlesCmd(m.db),
+			m.showToast(m.tr.Library.Saved),
+		}
+		if c := m.loadCurrentCmd(); c != nil {
+			cmds = append(cmds, c)
+		}
+		return m, tea.Batch(cmds...)
+
+	case libraryDeletedMsg:
+		cmds := []tea.Cmd{
+			loadFeedsCmd(m.db),
+			loadAllArticlesCmd(m.db),
+			m.showToast(m.tr.Library.Deleted),
+		}
+		if c := m.loadCurrentCmd(); c != nil {
+			cmds = append(cmds, c)
+		}
+		return m, tea.Batch(cmds...)
 
 	case smartFoldersLoadedMsg:
 		m.err = nil
@@ -1409,6 +1483,7 @@ func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
 			}
 		}
 		next := options[(cur+1)%len(options)]
+		prev := m.refreshInterval
 		m.refreshInterval = time.Duration(next) * time.Minute
 		if m.db != nil {
 			_ = m.db.SetRefreshInterval(next)
@@ -1417,7 +1492,17 @@ func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
 		if next > 0 {
 			label = fmt.Sprintf(m.tr.Settings.RefreshFmt, next)
 		}
-		return m, m.showToast(label)
+		cmds := []tea.Cmd{m.showToast(label)}
+		// Arm a fresh ticker only on off → on transition. For on → on the
+		// previously armed tea.Tick is still pending; it re-arms to the new
+		// interval on its next fire. Spawning a second ticker here would
+		// double the fetch cadence.
+		if prev == 0 && m.refreshInterval > 0 {
+			if tick := scheduleRefreshCmd(m.refreshInterval); tick != nil {
+				cmds = append(cmds, tick)
+			}
+		}
+		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }
@@ -1886,6 +1971,10 @@ func (m Model) View() string {
 	}
 	if m.width < 40 || m.height < 10 {
 		return m.tr.Status.TooSmall
+	}
+
+	if m.focus == focusAddURL {
+		return m.renderAddURLModal(m.width, m.height)
 	}
 
 	helpView := m.helpView()
@@ -2384,7 +2473,7 @@ func (m Model) markAllReadOnCurrentEntry() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch e.Kind {
-	case entryFeed:
+	case entryFeed, entryLibrary:
 		return m, markFeedReadCmd(m.db, e.FeedID)
 	case entryFolder:
 		q := m.smartFolders[e.FolderIdx].Query
@@ -2518,7 +2607,7 @@ func (m Model) jumpToNextUnread() (tea.Model, tea.Cmd) {
 	for off := 1; off <= len(entries); off++ {
 		i := (m.selEntry + off) % len(entries)
 		e := entries[i]
-		if e.Kind != entryFeed {
+		if e.Kind != entryFeed && e.Kind != entryLibrary {
 			continue
 		}
 		if e.UnreadCount > 0 {
@@ -2539,6 +2628,22 @@ func (m Model) jumpToNextUnread() (tea.Model, tea.Cmd) {
 // string) is pinned to the bottom.
 func (m Model) entries() []feedEntry {
 	out := make([]feedEntry, 0, len(m.smartFolders)+len(m.feeds)+8)
+
+	// Library section pinned to the top. Unread count is derived from the
+	// cross-feed cache so it stays in sync without an extra DB call.
+	libUnread := 0
+	for _, a := range m.allArticles {
+		if a.FeedID == m.libraryFeedID && a.ReadAt == nil {
+			libUnread++
+		}
+	}
+	out = append(out, feedEntry{
+		Kind:        entryLibrary,
+		Name:        m.tr.Library.SectionLabel,
+		FeedID:      m.libraryFeedID,
+		UnreadCount: libUnread,
+	})
+
 	for i, f := range m.smartFolders {
 		count := 0
 		if i < len(m.folderCounts) {
@@ -2676,12 +2781,14 @@ func (m Model) loadCurrentCmd() tea.Cmd {
 		return loadFolderArticlesCmd(m.db, e.FolderIdx, m.smartFolders[e.FolderIdx].Query)
 	case entryCategory:
 		return loadCategoryArticlesCmd(m.db, e.Name, e.CategoryFeedIDs)
+	case entryLibrary:
+		return loadArticlesCmd(m.db, e.FeedID, m.filter)
 	}
 	return loadArticlesCmd(m.db, e.FeedID, m.filter)
 }
 
 func (m Model) helpView() string {
-	raw := m.help.ShortHelpView(shortHelpFor(m.focus, m.keys))
+	raw := m.help.ShortHelpView(shortHelpFor(m.focus, m.keys, m.currentEntryIsLibrary()))
 	return paintLineBG("  "+raw, m.width)
 }
 

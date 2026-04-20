@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -133,10 +134,10 @@ func renderReaderBody(a db.Article, feedName, feedURL string, contentW int, show
 	// double-padded middots.
 	metaParts := []string{readerSource.Render(feedIcon(feedURL, feedName) + " " + feedName)}
 	if ago := timeAgo(a.PublishedAt, tr); ago != "" {
-		metaParts = append(metaParts, readerMetaMuted.Render("\uf64f "+ago))
+		metaParts = append(metaParts, readerMetaMuted.Render(ago))
 	}
 	if rt := readingTime(a, tr); rt != "" {
-		metaParts = append(metaParts, readerMetaMuted.Render("\U000f05cd "+rt))
+		metaParts = append(metaParts, readerMetaMuted.Render(rt))
 	}
 	b.WriteString(strings.Join(metaParts, readerMetaMuted.Render("  ·  ")))
 	b.WriteString("\n")
@@ -374,16 +375,48 @@ func glamourStyleConfig() ansi.StyleConfig {
 	cfg.Strong.BackgroundColor = &bg
 	cfg.Link.BackgroundColor = &bg
 	cfg.LinkText.BackgroundColor = &bg
-	cfg.Code.StylePrimitive.BackgroundColor = &bg
 	cfg.HorizontalRule.BackgroundColor = &bg
+	cfg.Table.StyleBlock.StylePrimitive.BackgroundColor = &bg
+
+	// Code: distinct foreground + alt background so inline `code` and fenced
+	// blocks visibly stand out from body text on every theme.
+	altBG := string(colorAltBG)
+	accent := string(colorAccent)
+	cfg.Code.StylePrimitive.BackgroundColor = &altBG
+	cfg.Code.StylePrimitive.Color = &accent
+	// Pad inline code with a space on each side so the background isn't flush
+	// against neighbouring letters — gives the highlighted run some breathing room.
+	cfg.Code.StylePrimitive.Prefix = " "
+	cfg.Code.StylePrimitive.Suffix = " "
+
+	indent := uint(4)
+	cfg.CodeBlock.StyleBlock.Indent = &indent
+	cfg.CodeBlock.StyleBlock.StylePrimitive.BackgroundColor = &altBG
 	if cfg.CodeBlock.Chroma != nil {
 		cfg.CodeBlock.Chroma.Background = ansi.StylePrimitive{
-			BackgroundColor: &bg,
+			BackgroundColor: &altBG,
+		}
+		overrideChromaBG(cfg.CodeBlock.Chroma, &altBG)
+	}
+	return cfg
+}
+
+// overrideChromaBG forces every syntax-token sub-style in the Chroma config to
+// share the same BackgroundColor. Without this, glamour's default chroma styles
+// keep their own backgrounds (or none), which renders as horizontal stripes
+// across the code block: tokens on one bg, the spaces between them on another.
+func overrideChromaBG(c *ansi.Chroma, bg *string) {
+	v := reflect.ValueOf(c).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		if f.Kind() != reflect.Struct {
+			continue
+		}
+		bgField := f.FieldByName("BackgroundColor")
+		if bgField.IsValid() && bgField.CanSet() {
+			bgField.Set(reflect.ValueOf(bg))
 		}
 	}
-	cfg.CodeBlock.StyleBlock.StylePrimitive.BackgroundColor = &bg
-	cfg.Table.StyleBlock.StylePrimitive.BackgroundColor = &bg
-	return cfg
 }
 
 func uintPtr(u uint) *uint { return &u }

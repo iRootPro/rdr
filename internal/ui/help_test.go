@@ -27,7 +27,7 @@ func keysContain(bindings []key.Binding, wantKey string) bool {
 
 func TestShortHelpFor_FeedsHasTabAndSearch(t *testing.T) {
 	k := defaultKeys(testTR)
-	got := shortHelpFor(focusFeeds, k)
+	got := shortHelpFor(focusFeeds, k, false)
 	if !keysContain(got, "tab") {
 		t.Fatal("focusFeeds should include tab (switch pane)")
 	}
@@ -44,24 +44,35 @@ func TestShortHelpFor_FeedsHasTabAndSearch(t *testing.T) {
 
 func TestShortHelpFor_ReaderHasJumpAndFull(t *testing.T) {
 	k := defaultKeys(testTR)
-	got := shortHelpFor(focusReader, k)
+	got := shortHelpFor(focusReader, k, false)
 	if !keysContain(got, "J") || !keysContain(got, "K") {
 		t.Fatal("focusReader should include J/K (next/prev article)")
 	}
 	if !keysContain(got, "f") {
 		t.Fatal("focusReader should include f (load full)")
 	}
-	if !keysContain(got, "L") {
-		t.Fatal("focusReader should include L (link picker)")
-	}
 	if keysContain(got, "tab") {
 		t.Fatal("focusReader should NOT include tab (no pane to switch to)")
 	}
 }
 
+func TestShortHelpFor_LibraryContextAddsDelete(t *testing.T) {
+	k := defaultKeys(testTR)
+	for _, f := range []focus{focusArticles, focusReader} {
+		out := shortHelpFor(f, k, false)
+		if keysContain(out, "D") {
+			t.Fatalf("focus %v: D should NOT appear when inLibrary=false", focusLabel(f, testTR))
+		}
+		out = shortHelpFor(f, k, true)
+		if !keysContain(out, "D") {
+			t.Fatalf("focus %v: D should appear when inLibrary=true", focusLabel(f, testTR))
+		}
+	}
+}
+
 func TestShortHelpFor_CommandContextual(t *testing.T) {
 	k := defaultKeys(testTR)
-	got := shortHelpFor(focusCommand, k)
+	got := shortHelpFor(focusCommand, k, false)
 	if !keysContain(got, "enter") || !keysContain(got, "esc") {
 		t.Fatal("focusCommand should include enter and esc")
 	}
@@ -73,7 +84,7 @@ func TestShortHelpFor_CommandContextual(t *testing.T) {
 
 func TestShortHelpFor_HelpOnlyHasClose(t *testing.T) {
 	k := defaultKeys(testTR)
-	got := shortHelpFor(focusHelp, k)
+	got := shortHelpFor(focusHelp, k, false)
 	if !keysContain(got, "esc") {
 		t.Fatal("focusHelp should include esc to close")
 	}
@@ -88,7 +99,7 @@ func TestFullHelpFor_AllFocusesNonEmpty(t *testing.T) {
 		focusSearch, focusCommand, focusLinks, focusHelp,
 	}
 	for _, f := range all {
-		sections := fullHelpFor(f, testTR)
+		sections := fullHelpFor(f, testTR, false)
 		if len(sections) == 0 {
 			t.Fatalf("fullHelpFor(%v) returned no sections", focusLabel(f, testTR))
 		}
@@ -103,7 +114,7 @@ func TestFullHelpFor_AllFocusesNonEmpty(t *testing.T) {
 }
 
 func TestFullHelpFor_ReaderHasArticleOps(t *testing.T) {
-	sections := fullHelpFor(focusReader, testTR)
+	sections := fullHelpFor(focusReader, testTR, false)
 	var articleSec *helpSection
 	for i := range sections {
 		if sections[i].Title == testTR.Help.SectionArticle {
@@ -130,7 +141,7 @@ func TestFullHelpFor_ReaderHasArticleOps(t *testing.T) {
 }
 
 func TestFullHelpFor_SearchHasQuerySyntax(t *testing.T) {
-	sections := fullHelpFor(focusSearch, testTR)
+	sections := fullHelpFor(focusSearch, testTR, false)
 	var hasSyntax bool
 	for _, sec := range sections {
 		if sec.Title == testTR.Help.SectionQuerySyn {

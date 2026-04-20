@@ -4,6 +4,7 @@
 
 # local dev state
 /dev/
+/dev-en/
 *.db
 *.db-journal
 

@@ -44,6 +44,8 @@ type keyMap struct {
 	YankURL       key.Binding
 	YankMarkdown  key.Binding
 	ToggleFold    key.Binding
+	AddLibrary    key.Binding
+	DeleteLibrary key.Binding
 }
 
 func defaultKeys(tr *i18n.Strings) keyMap {
@@ -89,6 +91,8 @@ func defaultKeys(tr *i18n.Strings) keyMap {
 		YankURL:       key.NewBinding(key.WithKeys("y", "н"), key.WithHelp("y", k.YankURL)),
 		YankMarkdown:  key.NewBinding(key.WithKeys("Y", "Н"), key.WithHelp("Y", k.YankMarkdown)),
 		ToggleFold:    key.NewBinding(key.WithKeys(" "), key.WithHelp("space", k.ToggleFold)),
+		AddLibrary:    key.NewBinding(key.WithKeys("B", "И"), key.WithHelp("B", k.AddLibrary)),
+		DeleteLibrary: key.NewBinding(key.WithKeys("D", "В"), key.WithHelp("D", k.DeleteLibrary)),
 	}
 }
 
@@ -127,7 +131,7 @@ func keyIs(msg tea.KeyMsg, keys ...string) bool {
 // as thin wrappers so anything still touching the interface keeps
 // compiling, but they're not invoked from rendering.
 func (k keyMap) ShortHelp() []key.Binding {
-	return shortHelpFor(focusFeeds, k)
+	return shortHelpFor(focusFeeds, k, false)
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
@@ -147,15 +151,27 @@ type helpSection struct {
 
 // shortHelpFor returns the subset of bindings that actually do something
 // in the given focus. Rendered as a single ShortHelpView row beneath
-// every view.
-func shortHelpFor(f focus, k keyMap) []key.Binding {
+// every view. inLibrary surfaces context-sensitive bindings (currently
+// just D for delete) so the short help line reflects what actually
+// works under the cursor.
+func shortHelpFor(f focus, k keyMap, inLibrary bool) []key.Binding {
 	switch f {
 	case focusFeeds:
-		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleFold, k.FilterUnread, k.FilterStarred, k.Search, k.Command, k.Help, k.Quit}
+		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Search, k.Help, k.Quit}
 	case focusArticles:
-		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Star, k.NextUnread, k.FilterUnread, k.FilterStarred, k.Search, k.Help, k.Quit}
+		base := []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Star}
+		if inLibrary {
+			base = append(base, k.DeleteLibrary)
+		}
+		return append(base, k.Help, k.Quit)
 	case focusReader:
-		return []key.Binding{k.Up, k.Down, k.NextArticle, k.PrevArticle, k.FullArticle, k.LinkPicker, k.OpenURL, k.YankURL, k.Star, k.Back, k.Help}
+		base := []key.Binding{k.Up, k.Down, k.NextArticle, k.PrevArticle, k.FullArticle}
+		if inLibrary {
+			base = append(base, k.DeleteLibrary)
+		}
+		return append(base, k.Back, k.Help)
+	case focusAddURL:
+		return []key.Binding{k.Enter, k.Back}
 	case focusSettings:
 		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Back, k.Help, k.Quit}
 	case focusSearch:
@@ -173,7 +189,7 @@ func shortHelpFor(f focus, k keyMap) []key.Binding {
 // fullHelpFor returns grouped sections shown on the full-screen help
 // overlay. Each focus contributes its own context sections; a Global
 // section always comes last.
-func fullHelpFor(f focus, tr *i18n.Strings) []helpSection {
+func fullHelpFor(f focus, tr *i18n.Strings, inLibrary bool) []helpSection {
 	h := tr.Help
 	global := helpSection{
 		Title: h.SectionGlobal,
@@ -183,6 +199,7 @@ func fullHelpFor(f focus, tr *i18n.Strings) []helpSection {
 			{"R", h.DescGlobalSync},
 			{"s", h.DescGlobalSettings},
 			{"z", h.DescGlobalZen},
+			{"B", h.DescGlobalAddURL},
 			{"?", h.DescGlobalHelp},
 			{"q", h.DescGlobalQuit},
 		},
@@ -202,15 +219,19 @@ func fullHelpFor(f focus, tr *i18n.Strings) []helpSection {
 				{"space", h.DescCollapseCat},
 			},
 		}
+		articleEntries := []helpEntry{
+			{"x / X", h.DescToggleMarkAll},
+			{"m", h.DescToggleStar},
+			{"p", h.DescTogglePreview},
+			{"y / Y", h.DescYankURLMD},
+			{"o", h.DescOpenBrowser},
+		}
+		if inLibrary {
+			articleEntries = append(articleEntries, helpEntry{"D", h.DescDeleteLibrary})
+		}
 		article := helpSection{
-			Title: h.SectionArticle,
-			Entries: []helpEntry{
-				{"x / X", h.DescToggleMarkAll},
-				{"m", h.DescToggleStar},
-				{"p", h.DescTogglePreview},
-				{"y / Y", h.DescYankURLMD},
-				{"o", h.DescOpenBrowser},
-			},
+			Title:   h.SectionArticle,
+			Entries: articleEntries,
 		}
 		filters := helpSection{
 			Title: h.SectionFilters,
@@ -233,17 +254,21 @@ func fullHelpFor(f focus, tr *i18n.Strings) []helpSection {
 				{"esc", h.DescBackToArticles},
 			},
 		}
+		readerArticleEntries := []helpEntry{
+			{"f", h.DescLoadFull},
+			{"L", h.DescLinkPicker},
+			{"o", h.DescOpenBrowser},
+			{"y / Y", h.DescYankURLMD},
+			{"x", h.DescToggleRead},
+			{"m", h.DescToggleStar},
+			{":images", h.DescToggleImages},
+		}
+		if inLibrary {
+			readerArticleEntries = append(readerArticleEntries, helpEntry{"D", h.DescDeleteLibrary})
+		}
 		article := helpSection{
-			Title: h.SectionArticle,
-			Entries: []helpEntry{
-				{"f", h.DescLoadFull},
-				{"L", h.DescLinkPicker},
-				{"o", h.DescOpenBrowser},
-				{"y / Y", h.DescYankURLMD},
-				{"x", h.DescToggleRead},
-				{"m", h.DescToggleStar},
-				{":images", h.DescToggleImages},
-			},
+			Title:   h.SectionArticle,
+			Entries: readerArticleEntries,
 		}
 		return []helpSection{nav, article, global}
 
@@ -388,6 +413,8 @@ func focusLabel(f focus, tr *i18n.Strings) string {
 		return fs.Links
 	case focusHelp:
 		return fs.Help
+	case focusAddURL:
+		return fs.AddURL
 	}
 	return ""
 }

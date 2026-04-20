@@ -236,10 +236,17 @@ func TestFetchAll_ContextCancelSurfaces(t *testing.T) {
 	}
 }
 
-func TestFetchOne_TrimsReadArticlesToSettingCap(t *testing.T) {
+// TestFetchOne_PreservesRecentlyReadDespiteCap guards the read-grace
+// window against regression: articles read within readGracePeriod survive
+// trim even when the feed is over its per-feed cap. Reproduces the user
+// report where a stray `x` keystroke caused articles to vanish on the
+// next sync.
+func TestFetchOne_PreservesRecentlyReadDespiteCap(t *testing.T) {
 	d := openTestDB(t)
-	// cap=4: after fetch we have 3 unread + 3 seeded read = 6 total,
-	// TrimArticles deletes (6-4)=2 oldest read rows, leaving 3 unread + 1 read.
+	// cap=4: after fetch we have 3 unread + 3 seeded read = 6 total.
+	// Pre-fix: TrimArticles would delete the 2 oldest read rows.
+	// Post-fix: all 3 reads are within the grace window (just marked
+	// read), so none get trimmed despite being over cap.
 	if err := d.SetSetting("max_articles_per_feed", "4"); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
@@ -293,8 +300,8 @@ func TestFetchOne_TrimsReadArticlesToSettingCap(t *testing.T) {
 	if unread != 3 {
 		t.Fatalf("unread: got %d, want 3", unread)
 	}
-	if read != 1 {
-		t.Fatalf("read: got %d, want 1 (oldest 2 of 3 reads trimmed)", read)
+	if read != 3 {
+		t.Fatalf("read: got %d, want 3 (recently-read protected by grace)", read)
 	}
 }
 
