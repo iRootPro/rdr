@@ -12,6 +12,7 @@ import (
 	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/feed"
 	"github.com/iRootPro/rdr/internal/i18n"
+	"github.com/iRootPro/rdr/internal/kitty"
 	"github.com/iRootPro/rdr/internal/ui"
 )
 
@@ -58,7 +59,25 @@ func main() {
 	langStr, _ := database.GetLanguage()
 	lang := i18n.Parse(langStr)
 
-	showImages, _ := database.GetShowImages()
+	// show_images: if the setting has never been written (fresh user),
+	// default ON when the terminal natively supports Kitty Graphics so
+	// inline images "just work" instead of waiting for the user to
+	// discover the `:images` toggle. Any explicit setting — including
+	// "false" — is honoured.
+	showImagesRaw, _ := database.GetSetting("show_images")
+	var showImages bool
+	if showImagesRaw == "" {
+		showImages = kitty.IsSupported()
+		_ = database.SetShowImages(showImages)
+	} else {
+		showImages = showImagesRaw == "true"
+	}
+	// tmux strips unknown APC sequences unless allow-passthrough is on.
+	// Log a hint so users who wonder why images don't render have a
+	// breadcrumb in the log file.
+	if showImages && kitty.InsideTmux() {
+		log.Printf("images: running inside tmux — add `set -g allow-passthrough on` to tmux.conf if inline images don't render")
+	}
 	sortField, _ := database.GetSortField()
 	if sortField == "" {
 		sortField = "date"

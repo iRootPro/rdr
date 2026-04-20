@@ -1,14 +1,20 @@
 package feed
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -89,6 +95,71 @@ func DownloadImages(ctx context.Context, urls []string, cacheDir string) (map[st
 		return paths, err
 	}
 	return paths, nil
+}
+
+// ToPNG ensures the given bytes are PNG-encoded. Kitty Graphics
+// Protocol with f=100 requires PNG; we convert JPEG/GIF/etc. via the
+// stdlib image package. Already-PNG input is returned unchanged.
+func ToPNG(data []byte) ([]byte, image.Point, error) {
+	if len(data) >= 8 && data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G' {
+		cfg, _, cerr := image.DecodeConfig(bytes.NewReader(data))
+		if cerr != nil {
+			return data, image.Point{}, nil
+		}
+		return data, image.Point{X: cfg.Width, Y: cfg.Height}, nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, image.Point{}, err
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, image.Point{}, err
+	}
+	sz := img.Bounds().Size()
+	return buf.Bytes(), sz, nil
+}
+
+// imgURLPattern matches markdown image references `![alt](url)`. The
+// URL is captured in the first submatch. We intentionally accept spaces
+// in the alt text and any non-paren chars in the URL.
+var imgURLPattern = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)`)
+
+// ExtractImageURLs scans the markdown for `![alt](url)` references and
+// returns URLs in the order they appear, deduplicated. URLs without a
+// scheme are skipped (local/relative refs aren't reachable here).
+func ExtractImageURLs(md string) []string {
+	matches := imgURLPattern.FindAllStringSubmatch(md, -1)
+	seen := make(map[string]struct{}, len(matches))
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if len(m) < 2 {
+			continue
+		}
+		u := strings.TrimSpace(m[1])
+		if u == "" {
+			continue
+		}
+		if !(strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")) {
+			continue
+		}
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	return out
+}
+
+// ImageID returns a deterministic 24-bit image ID derived from the URL.
+// We fold SHA256 down to 24 bits so the low bytes fit in a standard
+// truecolor FG triple (used by older placeholder approach). IDs are
+// not strictly unique but collisions across one article are vanishingly
+// rare and tolerable.
+func ImageID(url string) uint32 {
+	sum := sha256.Sum256([]byte(url))
+	return uint32(sum[0])<<16 | uint32(sum[1])<<8 | uint32(sum[2])
 }
 
 // ImageFileName returns a deterministic filename for the given image URL.

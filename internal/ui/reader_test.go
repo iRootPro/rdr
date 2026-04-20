@@ -15,7 +15,7 @@ func stripANSI(s string) string { return reANSI.ReplaceAllString(s, "") }
 
 func TestLayoutReader_NarrowTerminalNoIndent(t *testing.T) {
 	a := db.Article{Title: "Hello", URL: "https://example.com", PublishedAt: time.Now(), CachedBody: "Body text here."}
-	out := layoutReader(a, "Feed", "", 70, false, testTR)
+	out := layoutReader(a, "Feed", "", 70, false, testTR, nil, nil)
 	for _, line := range strings.Split(out, "\n") {
 		plain := stripANSI(line)
 		trimmed := strings.TrimLeft(plain, " ")
@@ -31,7 +31,7 @@ func TestLayoutReader_NarrowTerminalNoIndent(t *testing.T) {
 
 func TestLayoutReader_WideTerminalCenters(t *testing.T) {
 	a := db.Article{Title: "Hi", URL: "https://example.com", PublishedAt: time.Now(), CachedBody: "Body."}
-	out := layoutReader(a, "Feed", "", 150, false, testTR)
+	out := layoutReader(a, "Feed", "", 150, false, testTR, nil, nil)
 	// (150 - 85) / 2 = 32 — every non-empty line should start with 32 spaces
 	// after stripping ANSI escape codes.
 	wantPad := strings.Repeat(" ", 32)
@@ -54,7 +54,7 @@ func TestLayoutReader_WideTerminalCenters(t *testing.T) {
 
 func TestRenderReaderBody_DividerMatchesContentWidth(t *testing.T) {
 	a := db.Article{Title: "T", URL: "", PublishedAt: time.Now(), CachedBody: "body"}
-	out := renderReaderBody(a, "F", "", 60, false, testTR)
+	out := renderReaderBody(a, "F", "", 60, false, testTR, nil, nil)
 	// Divider line should have exactly 60 "─" characters.
 	want := strings.Repeat("─", 60)
 	if !strings.Contains(out, want) {
@@ -65,7 +65,7 @@ func TestRenderReaderBody_DividerMatchesContentWidth(t *testing.T) {
 func TestRenderReaderBody_TruncatesLongURL(t *testing.T) {
 	longURL := "https://example.com/" + strings.Repeat("verylong/", 30)
 	a := db.Article{Title: "T", URL: longURL, PublishedAt: time.Now(), CachedBody: "x"}
-	out := renderReaderBody(a, "F", "", 60, false, testTR)
+	out := renderReaderBody(a, "F", "", 60, false, testTR, nil, nil)
 	if strings.Contains(out, longURL) {
 		t.Fatal("long URL should be truncated but full URL is present")
 	}
@@ -76,7 +76,7 @@ func TestRenderReaderBody_TruncatesLongURL(t *testing.T) {
 
 func TestRenderEmptyReader_ContainsCTABox(t *testing.T) {
 	a := db.Article{Title: "Empty", URL: "https://x", PublishedAt: time.Now()} // no CachedBody, no description
-	out := renderReaderBody(a, "F", "", 70, false, testTR)
+	out := renderReaderBody(a, "F", "", 70, false, testTR, nil, nil)
 	if !strings.Contains(out, "Press [f]") {
 		t.Fatalf("empty state should prompt with Press [f], got:\n%s", out)
 	}
@@ -98,7 +98,7 @@ func TestRenderReaderBody_DescriptionRenderedAsPreview(t *testing.T) {
 		PublishedAt: time.Now(),
 		Description: strings.Join(words, " "),
 	}
-	out := renderReaderBody(a, "Habr", "", 70, false, testTR)
+	out := renderReaderBody(a, "Habr", "", 70, false, testTR, nil, nil)
 	// No rounded border box for description-only case.
 	if strings.Contains(out, "╭") {
 		t.Fatalf("description preview should not show empty-state box, got:\n%s", out)
@@ -124,7 +124,7 @@ func TestRenderReaderBody_EmptyStubStillShowsCard(t *testing.T) {
 		PublishedAt: time.Now(),
 		Content:     "Article URL: https://example.com Points: 17",
 	}
-	out := renderReaderBody(a, "HN", "", 70, false, testTR)
+	out := renderReaderBody(a, "HN", "", 70, false, testTR, nil, nil)
 	if !strings.Contains(out, "╭") {
 		t.Fatalf("short stub should show empty-state box, got:\n%s", out)
 	}
@@ -255,7 +255,7 @@ func TestRenderEmptyReader_ShowsContentStub(t *testing.T) {
 		PublishedAt: time.Now(),
 		Content:     "Article URL: https://example.com\nPoints: 42",
 	}
-	out := renderReaderBody(a, "F", "", 70, false, testTR)
+	out := renderReaderBody(a, "F", "", 70, false, testTR, nil, nil)
 	if !strings.Contains(out, "Points: 42") {
 		t.Fatalf("expected Content stub to appear below empty box, got:\n%s", out)
 	}
