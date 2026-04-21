@@ -112,9 +112,12 @@ type SettingsStrings struct {
 	SortLabel     string
 	PreviewLabel  string
 	ThemeLabel    string
-	RefreshLabel  string
-	RefreshOff    string
-	RefreshFmt    string // "%d min"
+	RefreshLabel   string
+	RefreshOff     string
+	RefreshFmt     string // "%d min"
+	RetentionLabel string
+	RetentionOff   string
+	RetentionFmt   string // "%d days"
 
 	AfterSyncTitle string
 	AfterSyncHint  string
@@ -323,6 +326,8 @@ type StatusStrings struct {
 	CategoriesOpened   string
 	ImagesOn           string
 	ImagesOff          string
+	RetentionSetFmt    string // "retention: %d days"
+	RetentionUnlimited string
 	PreviewOn          string
 	PreviewOff         string
 	ImportedFmt        string // "imported %d feeds"
@@ -384,7 +389,8 @@ type CommandStrings struct {
 	HelpCopyMD   string
 	HelpImport   string
 	HelpExport   string
-	HelpImages   string
+	HelpImages    string
+	HelpRetention string
 	HelpCollapseAll string
 	HelpExpandAll string
 	HelpZen      string
@@ -445,6 +451,8 @@ type FiltersStrings struct {
 type ErrorsStrings struct {
 	SortNeedsArg      string
 	UnknownSortFmt    string
+	RetentionNeedsArg   string
+	RetentionInvalidFmt string
 	FilterNeedsArg    string
 	UnknownFilterFmt  string
 	ReadNeedsQuery    string
@@ -503,9 +511,12 @@ var en = Strings{
 		SortLabel:     "Sort",
 		PreviewLabel:  "Preview",
 		ThemeLabel:    "Theme",
-		RefreshLabel:  "Auto-refresh",
-		RefreshOff:    "disabled",
-		RefreshFmt:    "%d min",
+		RefreshLabel:   "Auto-refresh",
+		RefreshOff:     "disabled",
+		RefreshFmt:     "%d min",
+		RetentionLabel: "Keep read articles",
+		RetentionOff:   "forever",
+		RetentionFmt:   "%d days",
 
 		AfterSyncTitle: "After-sync commands",
 		AfterSyncHint:  "a add · d delete · e edit · esc close",
@@ -698,6 +709,8 @@ var en = Strings{
 		CategoriesOpened:   "categories expanded",
 		ImagesOn:           "images on",
 		ImagesOff:          "images off",
+		RetentionSetFmt:    "retention: %d days",
+		RetentionUnlimited: "retention: unlimited",
 		PreviewOn:          "preview on",
 		PreviewOff:         "preview off",
 		ImportedFmt:        "imported %d feeds",
@@ -757,6 +770,7 @@ var en = Strings{
 		HelpImport:        "Import feeds from OPML file (:import <path>)",
 		HelpExport:        "Export feeds to OPML file (:export <path>)",
 		HelpImages:        "Toggle image markdown in reader",
+		HelpRetention:     "Set read-article retention (days or 'off')",
 		HelpCollapseAll:   "Collapse all feed categories",
 		HelpExpandAll:     "Expand all feed categories",
 		HelpZen:           "Toggle zen mode",
@@ -809,8 +823,10 @@ var en = Strings{
 		Starred: "starred",
 	},
 	Errors: ErrorsStrings{
-		SortNeedsArg:      ":sort needs date|title",
-		UnknownSortFmt:    "unknown sort field %q",
+		SortNeedsArg:        ":sort needs date|title",
+		UnknownSortFmt:      "unknown sort field %q",
+		RetentionNeedsArg:   ":retention needs a number of days or 'off'",
+		RetentionInvalidFmt: "invalid retention value %q",
 		FilterNeedsArg:    ":filter needs all|unread|starred",
 		UnknownFilterFmt:  "unknown filter %q",
 		ReadNeedsQuery:    ":read needs a query",
@@ -908,9 +924,12 @@ var ru = Strings{
 		SortLabel:     "Сортировка",
 		PreviewLabel:  "Превью",
 		ThemeLabel:    "Тема",
-		RefreshLabel:  "Автообновление",
-		RefreshOff:    "отключено",
-		RefreshFmt:    "%d мин",
+		RefreshLabel:   "Автообновление",
+		RefreshOff:     "отключено",
+		RefreshFmt:     "%d мин",
+		RetentionLabel: "Хранить прочитанные",
+		RetentionOff:   "бессрочно",
+		RetentionFmt:   "%d дн.",
 
 		AfterSyncTitle: "Автокоманды после синхронизации",
 		AfterSyncHint:  "a добавить · d удалить · e править · esc закрыть",
@@ -1103,6 +1122,8 @@ var ru = Strings{
 		CategoriesOpened:   "категории развёрнуты",
 		ImagesOn:           "картинки включены",
 		ImagesOff:          "картинки выключены",
+		RetentionSetFmt:    "хранение: %d дней",
+		RetentionUnlimited: "хранение: без ограничений",
 		PreviewOn:          "превью включено",
 		PreviewOff:         "превью выключено",
 		ImportedFmt:        "импортировано лент: %d",
@@ -1162,6 +1183,7 @@ var ru = Strings{
 		HelpImport:        "Импортировать ленты из OPML (:import <путь>)",
 		HelpExport:        "Экспортировать ленты в OPML (:export <путь>)",
 		HelpImages:        "Переключить картинки в читалке",
+		HelpRetention:     "Срок хранения прочитанных (дни или 'off')",
 		HelpCollapseAll:   "Свернуть все категории лент",
 		HelpExpandAll:     "Развернуть все категории лент",
 		HelpZen:           "Переключить zen-режим",
@@ -1214,8 +1236,10 @@ var ru = Strings{
 		Starred: "со звездой",
 	},
 	Errors: ErrorsStrings{
-		SortNeedsArg:      ":sort требует date|title",
-		UnknownSortFmt:    "неизвестное поле сортировки %q",
+		SortNeedsArg:        ":sort требует date|title",
+		UnknownSortFmt:      "неизвестное поле сортировки %q",
+		RetentionNeedsArg:   ":retention требует число дней или 'off'",
+		RetentionInvalidFmt: "неверное значение retention %q",
 		FilterNeedsArg:    ":filter требует all|unread|starred",
 		UnknownFilterFmt:  "неизвестный фильтр %q",
 		ReadNeedsQuery:    ":read требует запрос",

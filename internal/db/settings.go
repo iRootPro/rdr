@@ -30,13 +30,20 @@ func (d *DB) SetSetting(key, value string) error {
 }
 
 const (
-	settingKeyLanguage    = "language"
-	settingKeyShowImages  = "show_images"
-	settingKeySortField   = "sort_field"
-	settingKeySortReverse = "sort_reverse"
-	settingKeyShowPreview = "show_preview"
-	settingKeyTheme       = "theme"
+	settingKeyLanguage          = "language"
+	settingKeyShowImages        = "show_images"
+	settingKeySortField         = "sort_field"
+	settingKeySortReverse       = "sort_reverse"
+	settingKeyShowPreview       = "show_preview"
+	settingKeyTheme             = "theme"
+	settingKeyReadRetentionDays = "read_retention_days"
 )
+
+// defaultReadRetentionDays is the fallback value of read_retention_days
+// for fresh installs (key unset in DB). 90 days gives back-search room
+// for seasonal content without letting the DB grow unboundedly on
+// high-volume feeds — max_articles_per_feed still caps per-feed totals.
+const defaultReadRetentionDays = 90
 
 func (d *DB) GetLanguage() (string, error) {
 	return d.GetSetting(settingKeyLanguage)
@@ -156,6 +163,36 @@ func (d *DB) SetAIKey(v string) error   { return d.SetSetting(settingKeyAIKey, v
 
 func (d *DB) GetAIModel() (string, error) { return d.GetSetting(settingKeyAIModel) }
 func (d *DB) SetAIModel(v string) error   { return d.SetSetting(settingKeyAIModel, v) }
+
+// GetReadRetentionDays returns how many days read articles are kept by
+// TrimArticles before age-based deletion. 0 means keep indefinitely (by
+// age; max_articles_per_feed still caps the per-feed count). When the
+// key is unset, returns defaultReadRetentionDays without writing it —
+// we don't want a silent auto-write to obscure "never configured" from
+// "configured to 90".
+func (d *DB) GetReadRetentionDays() (int, error) {
+	v, err := d.GetSetting(settingKeyReadRetentionDays)
+	if err != nil {
+		return defaultReadRetentionDays, err
+	}
+	if v == "" {
+		return defaultReadRetentionDays, nil
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 0 {
+		return defaultReadRetentionDays, nil
+	}
+	return n, nil
+}
+
+// SetReadRetentionDays persists the retention window (days). Passing 0
+// disables age-based deletion.
+func (d *DB) SetReadRetentionDays(days int) error {
+	if days < 0 {
+		days = 0
+	}
+	return d.SetSetting(settingKeyReadRetentionDays, strconv.Itoa(days))
+}
 
 func boolToStr(v bool) string {
 	if v {

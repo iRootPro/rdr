@@ -24,11 +24,6 @@ import (
 const (
 	userAgent            = "rdr/0.1 (+https://github.com/iRootPro/rdr)"
 	maxConcurrentFetches = 8
-	// readGracePeriod is the window during which freshly read articles
-	// survive trim, even if the feed is over its per-feed cap. Protects
-	// against accidental `x` keystrokes destroying rows the user might
-	// still want to revisit.
-	readGracePeriod = 7 * 24 * time.Hour
 )
 
 type FetchResult struct {
@@ -84,10 +79,17 @@ func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, erro
 	}
 	// Trim failure is fatal for now — there's no logger wired up, and silent
 	// swallow is worse than propagating. Revisit once Fetcher has warnings.
-	// Articles read within readGracePeriod are protected from trim so a
-	// stray `x` keystroke doesn't permanently destroy a row before the
-	// user notices.
-	readCutoff := fetchStart.Add(-readGracePeriod)
+	//
+	// Retention policy: `read_retention_days` (DB setting, default 90)
+	// controls how long read articles survive. 0 means "keep forever" —
+	// we pass a zero readCutoff which TrimArticles treats as a no-op
+	// (bypassing both age filter and per-feed cap). Any other value sets
+	// readCutoff to N days ago and the usual trim applies.
+	retention, _ := f.db.GetReadRetentionDays()
+	var readCutoff time.Time
+	if retention > 0 {
+		readCutoff = fetchStart.Add(-time.Duration(retention) * 24 * time.Hour)
+	}
 	if err := f.db.TrimArticles(feed.ID, f.maxArticlesPerFeed(), fetchStart, readCutoff); err != nil {
 		return FetchResult{}, fmt.Errorf("trim: %w", err)
 	}

@@ -334,6 +334,38 @@ func TestTrimArticles_PreservesRecentlyRead(t *testing.T) {
 	}
 }
 
+// TestTrimArticles_ZeroReadCutoffKeepsAllReadArticles asserts that
+// passing zero time.Time as readCutoff disables the age-based trim —
+// this is the "retention=0 / unlimited" path. Articles still get
+// protected by starred/bookmarked and by the fetch-cutoff guard; only
+// the age check is bypassed.
+func TestTrimArticles_ZeroReadCutoffKeepsAllReadArticles(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 5; i++ {
+		a := newArticle(f.ID, urlN(i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		_, _ = d.UpsertArticle(a)
+	}
+	list, _ := d.ListArticles(f.ID, 10)
+	for _, a := range list {
+		_ = d.MarkRead(a.ID)
+	}
+	// Backdate read_at well into the past so a normal readCutoff would
+	// have removed them — only the zero-cutoff bypass should save us.
+	// (Using a far-future fetchCutoff so the fetch guard isn't what's
+	// protecting the rows.)
+	fetchCutoff := time.Now().UTC().Add(time.Hour)
+	if err := d.TrimArticles(f.ID, 1, fetchCutoff, time.Time{}); err != nil {
+		t.Fatalf("TrimArticles: %v", err)
+	}
+	list, _ = d.ListArticles(f.ID, 10)
+	if len(list) != 5 {
+		t.Fatalf("zero readCutoff must skip age filter: got %d remaining, want 5", len(list))
+	}
+}
+
 func urlN(i int) string {
 	return "https://a.example/" + string(rune('0'+i))
 }

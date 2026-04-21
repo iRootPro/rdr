@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -144,6 +145,7 @@ func buildCommandCompletions(tr *i18n.Strings) []commandSuggestion {
 		{"import", c.HelpImport},
 		{"export", c.HelpExport},
 		{"images", c.HelpImages},
+		{"retention", c.HelpRetention},
 		{"collapseall", c.HelpCollapseAll},
 		{"expandall", c.HelpExpandAll},
 		{"zen", c.HelpZen},
@@ -495,6 +497,37 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 				m.readerImgURLs = nil
 				m.readerImgPlacements = nil
 			}
+		}
+		return m, nil
+
+	case "retention":
+		if len(args) == 0 {
+			m.err = fmt.Errorf("%s", tr.Errors.RetentionNeedsArg)
+			return m, nil
+		}
+		arg := strings.ToLower(args[0])
+		var days int
+		switch arg {
+		case "off", "unlimited", "infinite", "0":
+			days = 0
+		default:
+			n, err := strconv.Atoi(arg)
+			if err != nil || n < 0 {
+				m.err = fmt.Errorf(tr.Errors.RetentionInvalidFmt, args[0])
+				return m, nil
+			}
+			days = n
+		}
+		if m.db != nil {
+			if err := m.db.SetReadRetentionDays(days); err != nil {
+				m.err = err
+				return m, nil
+			}
+		}
+		if days == 0 {
+			m.status = tr.Status.RetentionUnlimited
+		} else {
+			m.status = fmt.Sprintf(tr.Status.RetentionSetFmt, days)
 		}
 		return m, nil
 
