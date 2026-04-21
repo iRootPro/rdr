@@ -127,7 +127,10 @@ var imgURLPattern = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)`
 
 // ExtractImageURLs scans the markdown for `![alt](url)` references and
 // returns URLs in the order they appear, deduplicated. URLs without a
-// scheme are skipped (local/relative refs aren't reachable here).
+// scheme are skipped (local/relative refs aren't reachable here). SVG
+// URLs are also dropped: Go's stdlib image package can't decode SVG,
+// so ToPNG would fail per image — skipping them keeps the log clean
+// and saves a wasted network round-trip.
 func ExtractImageURLs(md string) []string {
 	matches := imgURLPattern.FindAllStringSubmatch(md, -1)
 	seen := make(map[string]struct{}, len(matches))
@@ -141,6 +144,15 @@ func ExtractImageURLs(md string) []string {
 			continue
 		}
 		if !(strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")) {
+			continue
+		}
+		// Strip query/fragment before extension check so URLs like
+		// "logo.svg?v=2" still match.
+		bare := u
+		if i := strings.IndexAny(bare, "?#"); i != -1 {
+			bare = bare[:i]
+		}
+		if strings.HasSuffix(strings.ToLower(bare), ".svg") {
 			continue
 		}
 		if _, dup := seen[u]; dup {

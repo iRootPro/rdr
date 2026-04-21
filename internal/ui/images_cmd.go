@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +13,39 @@ import (
 	"github.com/iRootPro/rdr/internal/kitty"
 	"github.com/iRootPro/rdr/internal/rlog"
 )
+
+// cellAspect is the height-to-width ratio of a single terminal cell in
+// pixels. Kitty scales inline images to fit the c×r cell box without
+// preserving aspect, so this value is what keeps visual proportions
+// correct. Populated from the terminal's own `CSI 16 t` reply at
+// startup via SetCellPixelSize; falls back to 2.1 (a decent average
+// across common monospace fonts) when the terminal didn't answer. Also
+// honours RDR_CELL_ASPECT for manual override when the query reports
+// wrong values (e.g. some emulators return logical vs physical pixels).
+var cellAspect = func() float64 {
+	if v := os.Getenv("RDR_CELL_ASPECT"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0.5 && f < 5 {
+			return f
+		}
+	}
+	return 2.1
+}()
+
+// SetCellPixelSize records the measured cell size (pixels) so cellSize
+// can compute image geometry from the terminal's actual font metrics.
+// No-op when either dimension is non-positive so callers can pass
+// through a failed query without guarding.
+func SetCellPixelSize(widthPx, heightPx int) {
+	if widthPx <= 0 || heightPx <= 0 {
+		return
+	}
+	// RDR_CELL_ASPECT still wins if explicitly set, so we only update
+	// from the query when there's no user override.
+	if os.Getenv("RDR_CELL_ASPECT") != "" {
+		return
+	}
+	cellAspect = float64(heightPx) / float64(widthPx)
+}
 
 // maxImgCols caps the horizontal cell size of any single inline image.
 // Very wide images would otherwise eat the whole reader column; 60 cells
@@ -109,11 +143,13 @@ func cellSize(imgW, imgH, contentW int) (cols, rows int) {
 	if cols < 10 {
 		cols = 10
 	}
-	// rows = cols * (imgH/imgW) / cellAspect. Use 21/10 as the cell
-	// aspect (≈2.1), ceiling-rounded so we don't systematically lose a
-	// row on fractional results.
-	num := cols*imgH*10 + imgW*21 - 1
-	rows = num / (imgW * 21)
+	// rows = cols * (imgH/imgW) / cellAspect, rounded to nearest so
+	// either direction of integer truncation error is equally likely,
+	// keeping aspect closest to the source image. Ceiling would bias
+	// toward narrower/taller displays; flooring would bias the other
+	// way. Nearest minimises the average distortion.
+	exact := float64(cols) * float64(imgH) / (float64(imgW) * cellAspect)
+	rows = int(exact + 0.5)
 	if rows < 3 {
 		rows = 3
 	}
