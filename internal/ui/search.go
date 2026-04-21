@@ -461,7 +461,18 @@ func renderSearchPreview(m Model, width, height int) string {
 	}
 
 	// Clip AND pad body to exact bodyRows so the pane never changes height.
+	// Also truncate each line to innerW first: glamour (via WordWrap) mostly
+	// wraps at innerW, but long unbreakable tokens like naked URLs can
+	// exceed that width. Without this truncation lipgloss would then
+	// soft-wrap the line at pane render time, inflating row count past
+	// bodyRows and shifting the layout whenever the user selects an
+	// article with wide URLs.
 	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if lipgloss.Width(line) > innerW {
+			lines[i] = truncate(line, innerW)
+		}
+	}
 	if len(lines) > bodyRows {
 		lines = lines[:bodyRows]
 	}
