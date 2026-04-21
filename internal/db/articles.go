@@ -483,7 +483,11 @@ type SearchItem struct {
 
 func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
 	if limit <= 0 {
-		limit = 2000
+		// 10000 default: big enough that a long-retention setup (90
+		// days × many feeds) still surfaces read articles in `/` search
+		// without the user hitting an invisible ceiling. Query filtering
+		// happens in memory so this is bounded by RAM, not index speed.
+		limit = 10000
 	}
 	rows, err := d.sql.Query(`
 		SELECT a.id, a.feed_id, f.name, a.title, a.url,
@@ -545,8 +549,14 @@ func (d *DB) SearchArticles(limit int) ([]SearchItem, error) {
 //     still in the current RSS response is protected — otherwise marking
 //     read right before a refresh would delete it and the next fetch
 //     would re-insert it as unread)
+//
+// Passing a zero time.Time as readCutoff is the "retention=0 / keep
+// everything" signal: the call returns without deleting. This matches
+// user intent ("I want unlimited history") — the per-feed `max` cap
+// would otherwise silently trim older read rows even when the user
+// explicitly opted out of age-based trimming.
 func (d *DB) TrimArticles(feedID int64, max int, fetchCutoff, readCutoff time.Time) error {
-	if max <= 0 {
+	if max <= 0 || readCutoff.IsZero() {
 		return nil
 	}
 	_, err := d.sql.Exec(`

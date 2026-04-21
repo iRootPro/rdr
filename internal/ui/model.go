@@ -1539,6 +1539,27 @@ func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, tea.Batch(cmds...)
+
+	case 6: // Retention
+		// Cycle through a preset ladder — users who need a custom value
+		// can still use `:retention N` in the command bar. 0 = keep
+		// everything indefinitely (TrimArticles no-ops).
+		options := []int{0, 30, 90, 180, 365}
+		cur, _ := m.db.GetReadRetentionDays()
+		idx := 0
+		for i, v := range options {
+			if v == cur {
+				idx = i
+				break
+			}
+		}
+		next := options[(idx+1)%len(options)]
+		_ = m.db.SetReadRetentionDays(next)
+		label := m.tr.Status.RetentionUnlimited
+		if next > 0 {
+			label = fmt.Sprintf(m.tr.Status.RetentionSetFmt, next)
+		}
+		return m, m.showToast(label)
 	}
 	return m, nil
 }
@@ -2870,7 +2891,12 @@ func loadFeedsCmd(d *db.DB) tea.Cmd {
 
 func loadArticlesCmd(d *db.DB, feedID int64, filter articleFilter) tea.Cmd {
 	return func() tea.Msg {
-		articles, err := d.ListArticlesFiltered(feedID, filter, 100)
+		// 500-item limit: high enough that normal feeds show every
+		// read/unread item without truncation (so users can scroll back
+		// to old articles they've read), but bounded so viewport
+		// rendering stays snappy on pathological feeds that dump
+		// thousands of entries.
+		articles, err := d.ListArticlesFiltered(feedID, filter, 500)
 		if err != nil {
 			return errMsg{err}
 		}

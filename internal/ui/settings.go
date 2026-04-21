@@ -73,6 +73,10 @@ func buildGeneralRows(m *Model) []generalRow {
 	if mins > 0 {
 		refreshDisplay = fmt.Sprintf(m.tr.Settings.RefreshFmt, mins)
 	}
+	retentionDisplay := m.tr.Settings.RetentionOff
+	if days, _ := m.db.GetReadRetentionDays(); days > 0 {
+		retentionDisplay = fmt.Sprintf(m.tr.Settings.RetentionFmt, days)
+	}
 	return []generalRow{
 		{m.tr.Settings.LanguageLabel, langDisplayName(m.lang)},
 		{m.tr.Settings.ImagesLabel, boolOnOff(m.showImages, m.tr)},
@@ -80,6 +84,7 @@ func buildGeneralRows(m *Model) []generalRow {
 		{m.tr.Settings.PreviewLabel, boolOnOff(m.showPreview, m.tr)},
 		{m.tr.Settings.ThemeLabel, m.themeName},
 		{m.tr.Settings.RefreshLabel, refreshDisplay},
+		{m.tr.Settings.RetentionLabel, retentionDisplay},
 	}
 }
 
