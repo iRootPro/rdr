@@ -13,6 +13,7 @@ import (
 	"github.com/iRootPro/rdr/internal/feed"
 	"github.com/iRootPro/rdr/internal/i18n"
 	"github.com/iRootPro/rdr/internal/kitty"
+	"github.com/iRootPro/rdr/internal/rlog"
 	"github.com/iRootPro/rdr/internal/ui"
 )
 
@@ -76,7 +77,21 @@ func main() {
 	// Log a hint so users who wonder why images don't render have a
 	// breadcrumb in the log file.
 	if showImages && kitty.InsideTmux() {
-		log.Printf("images: running inside tmux — add `set -g allow-passthrough on` to tmux.conf if inline images don't render")
+		rlog.Init(home)
+		rlog.Log("images", "running inside tmux — add `set -g allow-passthrough on` to tmux.conf if inline images don't render")
+	}
+	// Query the real cell size BEFORE bubbletea takes over stdin; after
+	// p.Run() starts we can't reliably read responses to terminal CSIs
+	// without racing the renderer. Silent non-conforming terminals fall
+	// through to the heuristic default in ui.
+	if showImages {
+		rlog.Init(home)
+		if w, h, ok := kitty.CellSize(); ok {
+			ui.SetCellPixelSize(w, h)
+			rlog.Logf("images", "cell size query returned %dx%d px (aspect %.2f)", w, h, float64(h)/float64(w))
+		} else {
+			rlog.Log("images", "cell size query failed, using default aspect 2.1")
+		}
 	}
 	sortField, _ := database.GetSortField()
 	if sortField == "" {
