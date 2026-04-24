@@ -18,6 +18,7 @@ Vim-style navigation, full article reading, smart folders, query language search
 
 - Split-pane interface: feeds on the left, articles on the right
 - Full article reading in the terminal (readability + glamour)
+- Inline images in the reader via Kitty Graphics Protocol
 - Feed categories with collapse/expand
 - Smart folders (saved search queries)
 - Search with query language (`title:rust unread newer:1w`)
@@ -233,7 +234,7 @@ Tabs: Feeds · General · Folders · Smart Folders · Auto-commands · AI
 | `enter` / `space` | Toggle value (General tab) |
 | `esc` | Close settings |
 
-**General** tab: language, images, sort, preview, theme, auto-refresh (0/5/15/30/60 min).
+**General** tab: language, images, sort, preview, theme, auto-refresh (0/5/15/30/60 min), read-article retention (0/30/90/180/365 days; 0 = keep forever).
 
 **Auto-commands** tab: commands run after every sync (query syntax, e.g. `read title:sponsor`).
 
@@ -284,6 +285,7 @@ Invoked via `:` (command mode). Tab autocomplete available.
 | `:import <path>` | Import feeds from OPML |
 | `:export <path>` | Export feeds to OPML |
 | `:images` | Toggle image display |
+| `:retention <N>` / `:retention off` | Read-article retention in days (`off` = keep forever) |
 | `:zen` | Toggle zen mode |
 | `:collapseall` | Collapse all categories |
 | `:expandall` | Expand all categories |
