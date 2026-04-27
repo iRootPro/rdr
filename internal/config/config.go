@@ -23,6 +23,8 @@ type FeedEntry struct {
 	Name     string `yaml:"name"`
 	URL      string `yaml:"url"`
 	Category string `yaml:"category,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
 }
 
 // SmartFolder is a saved query that appears as a virtual folder in the feed

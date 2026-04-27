@@ -84,4 +84,10 @@ var migrations = []string{
 	INSERT OR IGNORE INTO feeds (name, url, position, category)
 	VALUES ('Library', 'internal://library', -1, '');
 	`,
+
+	// 008: HTTP Basic Auth credentials for private RSS feeds
+	`
+	ALTER TABLE feeds ADD COLUMN username TEXT;
+	ALTER TABLE feeds ADD COLUMN password TEXT;
+	`,
 }

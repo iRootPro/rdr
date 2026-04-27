@@ -8,7 +8,7 @@ import (
 func TestUpsertFeed_InsertThenUpdateName(t *testing.T) {
 	d := openTestDB(t)
 
-	f1, err := d.UpsertFeed("Hacker News", "https://hnrss.org/frontpage", "")
+	f1, err := d.UpsertFeed("Hacker News", "https://hnrss.org/frontpage", "", "", "")
 	if err != nil {
 		t.Fatalf("upsert insert: %v", err)
 	}
@@ -16,7 +16,7 @@ func TestUpsertFeed_InsertThenUpdateName(t *testing.T) {
 		t.Fatalf("unexpected feed: %+v", f1)
 	}
 
-	f2, err := d.UpsertFeed("HN", "https://hnrss.org/frontpage", "")
+	f2, err := d.UpsertFeed("HN", "https://hnrss.org/frontpage", "", "", "")
 	if err != nil {
 		t.Fatalf("upsert update: %v", err)
 	}
@@ -31,8 +31,8 @@ func TestUpsertFeed_InsertThenUpdateName(t *testing.T) {
 func TestListFeeds_OrdersByPositionAndCountsUnread(t *testing.T) {
 	d := openTestDB(t)
 
-	a, _ := d.UpsertFeed("A", "https://a.example/rss", "")
-	b, _ := d.UpsertFeed("B", "https://b.example/rss", "")
+	a, _ := d.UpsertFeed("A", "https://a.example/rss", "", "", "")
+	b, _ := d.UpsertFeed("B", "https://b.example/rss", "", "", "")
 
 	mustExec(t, d, `
 		INSERT INTO articles (feed_id, title, url, published_at, read_at)
@@ -64,7 +64,7 @@ func TestListFeeds_OrdersByPositionAndCountsUnread(t *testing.T) {
 
 func TestDeleteFeed_CascadesArticles(t *testing.T) {
 	d := openTestDB(t)
-	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "", "", "")
 	mustExec(t, d, `
 		INSERT INTO articles (feed_id, title, url, published_at)
 		VALUES (?, 't', 'https://a.example/1', ?)
@@ -86,7 +86,7 @@ func TestDeleteFeed_CascadesArticles(t *testing.T) {
 
 func TestListFeeds_ZeroArticlesReportsZeroUnread(t *testing.T) {
 	d := openTestDB(t)
-	if _, err := d.UpsertFeed("Empty", "https://empty.example/rss", ""); err != nil {
+	if _, err := d.UpsertFeed("Empty", "https://empty.example/rss", "", "", ""); err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
 	feeds, err := d.ListFeeds()
@@ -103,7 +103,7 @@ func TestListFeeds_ZeroArticlesReportsZeroUnread(t *testing.T) {
 
 func TestRenameFeed_ChangesNameKeepsURL(t *testing.T) {
 	d := openTestDB(t)
-	f, err := d.UpsertFeed("Old", "https://a.example/rss", "")
+	f, err := d.UpsertFeed("Old", "https://a.example/rss", "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
@@ -124,9 +124,9 @@ func TestRenameFeed_ChangesNameKeepsURL(t *testing.T) {
 
 func TestRenameCategory_BulkUpdate(t *testing.T) {
 	d := openTestDB(t)
-	a, _ := d.UpsertFeed("A", "https://a.example/rss", "Tech")
-	b, _ := d.UpsertFeed("B", "https://b.example/rss", "Tech")
-	c, _ := d.UpsertFeed("C", "https://c.example/rss", "News")
+	a, _ := d.UpsertFeed("A", "https://a.example/rss", "Tech", "", "")
+	b, _ := d.UpsertFeed("B", "https://b.example/rss", "Tech", "", "")
+	c, _ := d.UpsertFeed("C", "https://c.example/rss", "News", "", "")
 
 	if err := d.RenameCategory("Tech", "Technology"); err != nil {
 		t.Fatalf("RenameCategory: %v", err)
@@ -150,8 +150,8 @@ func TestRenameCategory_BulkUpdate(t *testing.T) {
 
 func TestDeleteCategory_MovesToOther(t *testing.T) {
 	d := openTestDB(t)
-	a, _ := d.UpsertFeed("A", "https://a.example/rss", "Tech")
-	b, _ := d.UpsertFeed("B", "https://b.example/rss", "News")
+	a, _ := d.UpsertFeed("A", "https://a.example/rss", "Tech", "", "")
+	b, _ := d.UpsertFeed("B", "https://b.example/rss", "News", "", "")
 
 	if err := d.DeleteCategory("Tech"); err != nil {
 		t.Fatalf("DeleteCategory: %v", err)

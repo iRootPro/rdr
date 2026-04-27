@@ -79,6 +79,8 @@ const (
 	smList settingsMode = iota
 	smAddName
 	smAddURL
+	smAddUsername
+	smAddPassword
 	smRename
 	smCategory
 	smCategoryPicker
@@ -92,6 +94,8 @@ const (
 	smAfterSyncAdd
 	smAfterSyncEdit
 	smAIEdit
+	smEditCredentials
+	smEditPassword
 )
 
 type settingsSection int
@@ -203,6 +207,9 @@ type Model struct {
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
 	pendingName               string
+	pendingURL                 string
+	pendingUsername           string
+	pendingPassword           string
 
 	searchInput   textinput.Model
 	searchAll     []db.SearchItem
@@ -1243,6 +1250,17 @@ func (m Model) updateSettingsFeeds(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settingsMode = smCategoryPicker
 		m.settingsCategoryPickerSel = initialCategoryPickerSel(&m)
 		return m, nil
+	case keyIs(msg, "p"):
+		if len(m.feeds) == 0 || m.settingsSel >= len(m.feeds) {
+			return m, nil
+		}
+		f := m.feeds[m.settingsSel]
+		m.pendingUsername = f.Username
+		m.pendingPassword = f.Password
+		m.settingsMode = smEditCredentials
+		m.settingsInput.SetValue("")
+		m.settingsInput.Focus()
+		return m, textinput.Blink
 	case keyIs(msg, "i"):
 		m.settingsMode = smImport
 		m.settingsInput.SetValue("")
@@ -1693,11 +1711,61 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		if value == "" {
 			return m, nil
 		}
-		if _, err := m.db.UpsertFeed(m.pendingName, value, ""); err != nil {
+		m.pendingURL = value
+		m.settingsMode = smAddUsername
+		m.settingsInput.SetValue("")
+		return m, textinput.Blink
+	case smAddUsername:
+		m.pendingUsername = value
+		m.settingsMode = smAddPassword
+		m.settingsInput.SetValue("")
+		return m, textinput.Blink
+	case smAddPassword:
+		m.pendingPassword = value
+		newFeed, err := m.db.UpsertFeed(m.pendingName, m.pendingURL, "", m.pendingUsername, m.pendingPassword)
+		if err != nil {
 			m.err = err
+			m.settingsMode = smList
+			m.settingsInput.Blur()
+			m.settingsInput.SetValue("")
+			m.toast = "ERROR: " + err.Error()
+			m.toastID++
 			return m, nil
 		}
 		m.pendingName = ""
+		m.pendingURL = ""
+		m.pendingUsername = ""
+		m.pendingPassword = ""
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		m.fetching = true
+		m.status = m.tr.Status.Fetching
+		m.toast = "+ " + newFeed.Name
+		m.toastID++
+		return m, tea.Batch(
+			loadFeedsCmd(m.db),
+			fetchOneCmd(m.fetcher, newFeed),
+			m.spin.Tick,
+		)
+	case smEditCredentials:
+		if len(m.feeds) == 0 {
+			return m, nil
+		}
+		m.settingsMode = smEditPassword
+		m.settingsInput.SetValue("")
+		return m, textinput.Blink
+	case smEditPassword:
+		if len(m.feeds) == 0 {
+			return m, nil
+		}
+		id := m.feeds[m.settingsSel].ID
+		if err := m.db.SetFeedCredentials(id, m.pendingUsername, m.pendingPassword); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.pendingUsername = ""
+		m.pendingPassword = ""
 		m.settingsMode = smList
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
@@ -2069,7 +2137,13 @@ func (m Model) View() string {
 			m.width,
 			m.height-1-helpH,
 		)
-		status := renderPowerline([]segment{appSegment(), {Text: m.tr.Status.SettingsCrumb, FG: colorText, BG: colorAltBG}}, m.width)
+		var status string
+		if m.toast != "" {
+			toastSeg := segment{Text: m.toast, FG: colorAccent, BG: colorAltBG, Bold: true}
+			status = renderPowerline([]segment{appSegment(), toastSeg}, m.width)
+		} else {
+			status = renderPowerline([]segment{appSegment(), {Text: m.tr.Status.SettingsCrumb, FG: colorText, BG: colorAltBG}}, m.width)
+		}
 		return lipgloss.JoinVertical(lipgloss.Top, body, status, helpView)
 	}
 
@@ -2993,6 +3067,16 @@ func fetchAllCmd(f *feed.Fetcher) tea.Cmd {
 			return errMsg{err}
 		}
 		return fetchDoneMsg{results: results}
+	}
+}
+
+func fetchOneCmd(f *feed.Fetcher, f2 db.Feed) tea.Cmd {
+	return func() tea.Msg {
+		result, err := f.FetchOne(context.Background(), f2)
+		if err != nil {
+			return errMsg{err}
+		}
+		return fetchDoneMsg{results: []feed.FetchResult{result}}
 	}
 }
 

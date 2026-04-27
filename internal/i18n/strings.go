@@ -77,6 +77,9 @@ type SettingsStrings struct {
 
 	NewFeedName      string
 	NewFeedURL       string
+	NewFeedUsername  string
+	NewFeedPassword  string
+	EditCredentials  string
 	RenameFeed       string
 	CategoryPrompt   string
 	ImportPrompt     string
@@ -194,7 +197,8 @@ type HelpStrings struct {
 	DescFeedsClose      string
 	DescFeedsImport     string
 	DescFeedsExport     string
-	DescFeedsCategory   string
+	DescFeedsCategory    string
+	DescFeedsCredentials string
 	DescFoldersEdit     string
 	DescFoldersDel      string
 	DescSmartFolderAdd  string
@@ -479,6 +483,9 @@ var en = Strings{
 
 		NewFeedName:      "New feed name:",
 		NewFeedURL:       "New feed URL:",
+		NewFeedUsername:  "Username (optional, for private feeds):",
+		NewFeedPassword:  "Password (optional):",
+		EditCredentials:  "Edit feed credentials:",
 		RenameFeed:       "Rename feed:",
 		CategoryPrompt:   "Category:",
 		ImportPrompt:     "Import OPML from:",
@@ -487,7 +494,7 @@ var en = Strings{
 		EnterSave:        "enter to save · esc to cancel",
 		EnterSaveOrEmpty: "enter to save (empty = Other) · esc to cancel",
 		NoFeeds:          "(no feeds) — press a to add",
-		FeedsHint:        "a add · d del · e rename · c cat · i import · E export · tab section · esc close",
+		FeedsHint:        "a add · d del · e rename · c cat · p credentials · i import · E export · tab section · esc close",
 
 		NoFolders:    "(no folders)",
 		FoldersHint:  "e rename · d delete · tab section · esc close",
@@ -580,7 +587,8 @@ var en = Strings{
 		DescFeedsClose:      "close",
 		DescFeedsImport:     "import OPML",
 		DescFeedsExport:     "export OPML",
-		DescFeedsCategory:   "set feed folder",
+		DescFeedsCategory:    "set feed folder",
+		DescFeedsCredentials: "edit feed credentials",
 		DescFoldersEdit:     "rename folder",
 		DescFoldersDel:      "delete folder",
 		DescSmartFolderAdd:  "add smart folder",
@@ -892,6 +900,9 @@ var ru = Strings{
 
 		NewFeedName:      "Название ленты:",
 		NewFeedURL:       "URL ленты:",
+		NewFeedUsername:  "Имя пользователя (опц., для приватных лент):",
+		NewFeedPassword:  "Пароль (опц.):",
+		EditCredentials:  "Редактировать реквизиты ленты:",
 		RenameFeed:       "Переименовать ленту:",
 		CategoryPrompt:   "Папка ленты:",
 		ImportPrompt:     "Импорт OPML из:",
@@ -900,7 +911,7 @@ var ru = Strings{
 		EnterSave:        "enter сохранить · esc отмена",
 		EnterSaveOrEmpty: "enter сохранить (пусто = Прочее) · esc отмена",
 		NoFeeds:          "(лент нет) — нажмите a чтобы добавить",
-		FeedsHint:        "a доб · d удал · e переим · c папка · i импорт · E экспорт · tab раздел · esc закрыть",
+		FeedsHint:        "a доб · d удал · e переим · c папка · p реквизиты · i импорт · E экспорт · tab раздел · esc закрыть",
 
 		NoFolders:    "(папок нет)",
 		FoldersHint:  "e переим · d удалить · tab раздел · esc закрыть",
@@ -993,7 +1004,8 @@ var ru = Strings{
 		DescFeedsClose:      "закрыть",
 		DescFeedsImport:     "импорт OPML",
 		DescFeedsExport:     "экспорт OPML",
-		DescFeedsCategory:   "задать папку ленты",
+		DescFeedsCategory:     "задать папку ленты",
+		DescFeedsCredentials: "редактировать реквизиты ленты",
 		DescFoldersEdit:     "переименовать папку",
 		DescFoldersDel:      "удалить папку",
 		DescSmartFolderAdd:  "добавить умную папку",

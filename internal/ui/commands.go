@@ -740,7 +740,7 @@ func importOPMLFile(d *db.DB, path string) (int, error) {
 	}
 	var added int
 	for _, e := range entries {
-		if _, err := d.UpsertFeed(e.Name, e.URL, ""); err != nil {
+		if _, err := d.UpsertFeed(e.Name, e.URL, "", e.Username, e.Password); err != nil {
 			return added, fmt.Errorf("upsert %q: %w", e.Name, err)
 		}
 		added++
@@ -755,7 +755,7 @@ func exportOPMLFile(d *db.DB, path string) (int, error) {
 	}
 	entries := make([]feed.OPMLEntry, 0, len(feeds))
 	for _, f := range feeds {
-		entries = append(entries, feed.OPMLEntry{Name: f.Name, URL: f.URL})
+		entries = append(entries, feed.OPMLEntry{Name: f.Name, URL: f.URL, Username: f.Username, Password: f.Password})
 	}
 	f, err := os.Create(path)
 	if err != nil {

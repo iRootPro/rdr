@@ -15,6 +15,8 @@ type Feed struct {
 	Position    int
 	CreatedAt   time.Time
 	UnreadCount int
+	Username    string
+	Password    string
 }
 
 // LibraryFeedURL is the sentinel URL of the system feed that owns
@@ -72,7 +74,7 @@ func (d *DB) GetLibraryFeedID() (int64, error) {
 
 // UpsertFeed inserts or updates a feed by URL. Category is overwritten
 // on conflict so yaml edits take effect on next sync.
-func (d *DB) UpsertFeed(name, url, category string) (Feed, error) {
+func (d *DB) UpsertFeed(name, url, category, username, password string) (Feed, error) {
 	tx, err := d.sql.Begin()
 	if err != nil {
 		return Feed{}, err
@@ -87,21 +89,24 @@ func (d *DB) UpsertFeed(name, url, category string) (Feed, error) {
 	}
 
 	_, err = tx.Exec(`
-		INSERT INTO feeds (name, url, category, position) VALUES (?, ?, ?, ?)
+		INSERT INTO feeds (name, url, category, position, username, password) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(url) DO UPDATE SET
 			name = excluded.name,
-			category = excluded.category
-	`, name, url, category, nextPos)
+			category = excluded.category,
+			username = excluded.username,
+			password = excluded.password
+	`, name, url, category, nextPos, username, password)
 	if err != nil {
 		return Feed{}, fmt.Errorf("upsert: %w", err)
 	}
 
 	var f Feed
 	row := tx.QueryRow(`
-		SELECT id, name, url, category, position, created_at
+		SELECT id, name, url, category, position, created_at,
+		       COALESCE(username, ''), COALESCE(password, '')
 		FROM feeds WHERE url = ?
 	`, url)
-	if err := row.Scan(&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt); err != nil {
+	if err := row.Scan(&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt, &f.Username, &f.Password); err != nil {
 		return Feed{}, fmt.Errorf("read back: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -113,7 +118,9 @@ func (d *DB) UpsertFeed(name, url, category string) (Feed, error) {
 func (d *DB) ListFeeds() ([]Feed, error) {
 	rows, err := d.sql.Query(`
 		SELECT f.id, f.name, f.url, f.category, f.position, f.created_at,
-		       COUNT(CASE WHEN a.id IS NOT NULL AND a.read_at IS NULL THEN 1 END)
+		       COUNT(CASE WHEN a.id IS NOT NULL AND a.read_at IS NULL THEN 1 END),
+		       COALESCE(f.username, ''),
+		       COALESCE(f.password, '')
 		FROM feeds f
 		LEFT JOIN articles a ON a.feed_id = f.id
 		WHERE f.url != ?
@@ -130,6 +137,7 @@ func (d *DB) ListFeeds() ([]Feed, error) {
 		var f Feed
 		if err := rows.Scan(
 			&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt, &f.UnreadCount,
+			&f.Username, &f.Password,
 		); err != nil {
 			return nil, err
 		}
@@ -141,9 +149,10 @@ func (d *DB) ListFeeds() ([]Feed, error) {
 func (d *DB) GetFeedByURL(url string) (*Feed, error) {
 	var f Feed
 	err := d.sql.QueryRow(`
-		SELECT id, name, url, category, position, created_at
+		SELECT id, name, url, category, position, created_at,
+		       COALESCE(username, ''), COALESCE(password, '')
 		FROM feeds WHERE url = ?
-	`, url).Scan(&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt)
+	`, url).Scan(&f.ID, &f.Name, &f.URL, &f.Category, &f.Position, &f.CreatedAt, &f.Username, &f.Password)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -186,4 +195,12 @@ func (d *DB) RenameCategory(oldName, newName string) error {
 // RenameCategory(name, "") that makes the caller's intent explicit.
 func (d *DB) DeleteCategory(name string) error {
 	return d.RenameCategory(name, "")
+}
+
+func (d *DB) SetFeedCredentials(id int64, username, password string) error {
+	_, err := d.sql.Exec(
+		`UPDATE feeds SET username = ?, password = ? WHERE id = ?`,
+		username, password, id,
+	)
+	return err
 }

@@ -10,8 +10,10 @@ import (
 
 // OPMLEntry is a flat representation of a feed extracted from an OPML file.
 type OPMLEntry struct {
-	Name string
-	URL  string
+	Name     string
+	URL      string
+	Username string
+	Password string
 }
 
 type opmlDoc struct {
@@ -32,6 +34,8 @@ type opmlOutline struct {
 	Type     string        `xml:"type,attr,omitempty"`
 	XMLURL   string        `xml:"xmlUrl,attr,omitempty"`
 	HTMLURL  string        `xml:"htmlUrl,attr,omitempty"`
+	Username string        `xml:"username,attr,omitempty"`
+	Password string        `xml:"password,attr,omitempty"`
 	Outlines []opmlOutline `xml:"outline"`
 }
 
@@ -59,7 +63,12 @@ func flattenOutlines(out *[]OPMLEntry, outlines []opmlOutline) {
 			if name == "" {
 				name = url
 			}
-			*out = append(*out, OPMLEntry{Name: name, URL: url})
+			*out = append(*out, OPMLEntry{
+				Name:     name,
+				URL:      url,
+				Username: strings.TrimSpace(o.Username),
+				Password: strings.TrimSpace(o.Password),
+			})
 		}
 		if len(o.Outlines) > 0 {
 			flattenOutlines(out, o.Outlines)
@@ -79,10 +88,12 @@ func WriteOPML(w io.Writer, title string, feeds []OPMLEntry) error {
 	}
 	for _, f := range feeds {
 		doc.Body.Outlines = append(doc.Body.Outlines, opmlOutline{
-			Text:   f.Name,
-			Title:  f.Name,
-			Type:   "rss",
-			XMLURL: f.URL,
+			Text:     f.Name,
+			Title:    f.Name,
+			Type:     "rss",
+			XMLURL:   f.URL,
+			Username: f.Username,
+			Password: f.Password,
 		})
 	}
 	if _, err := io.WriteString(w, xml.Header); err != nil {

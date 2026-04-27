@@ -40,7 +40,7 @@ func TestFetchOne_AtomHappyPath(t *testing.T) {
 	srv := serveFixture(t, "atom_feed.xml")
 	defer srv.Close()
 
-	feed, err := d.UpsertFeed("Example", srv.URL, "")
+	feed, err := d.UpsertFeed("Example", srv.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestFetchOne_IsIdempotent(t *testing.T) {
 	d := openTestDB(t)
 	srv := serveFixture(t, "atom_feed.xml")
 	defer srv.Close()
-	feed, err := d.UpsertFeed("Example", srv.URL, "")
+	feed, err := d.UpsertFeed("Example", srv.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestFetchOne_MalformedXMLReturnsError(t *testing.T) {
 		_, _ = w.Write([]byte("<not xml at all"))
 	}))
 	defer srv.Close()
-	feed, err := d.UpsertFeed("Bad", srv.URL, "")
+	feed, err := d.UpsertFeed("Bad", srv.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestFetchOne_HTTP500ReturnsError(t *testing.T) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	feed, err := d.UpsertFeed("Boom", srv.URL, "")
+	feed, err := d.UpsertFeed("Boom", srv.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestFetchOne_EmptyTitleUsesFallback(t *testing.T) {
 	d := openTestDB(t)
 	srv := serveFixture(t, "notitle_feed.xml")
 	defer srv.Close()
-	feed, err := d.UpsertFeed("NoTitle", srv.URL, "")
+	feed, err := d.UpsertFeed("NoTitle", srv.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
@@ -169,11 +169,11 @@ func TestFetchAll_ContinuesAfterPerFeedError(t *testing.T) {
 	}))
 	defer bad.Close()
 
-	goodFeed, err := d.UpsertFeed("Good", good.URL, "")
+	goodFeed, err := d.UpsertFeed("Good", good.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed good: %v", err)
 	}
-	badFeed, err := d.UpsertFeed("Bad", bad.URL, "")
+	badFeed, err := d.UpsertFeed("Bad", bad.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed bad: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestFetchAll_ContextCancelSurfaces(t *testing.T) {
 	defer srv.Close()
 	defer close(block)
 
-	if _, err := d.UpsertFeed("Slow", srv.URL, ""); err != nil {
+	if _, err := d.UpsertFeed("Slow", srv.URL, "", "", ""); err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}
 
@@ -253,7 +253,7 @@ func TestFetchOne_PreservesRecentlyReadDespiteCap(t *testing.T) {
 
 	srv := serveFixture(t, "atom_feed.xml")
 	defer srv.Close()
-	feed, err := d.UpsertFeed("Example", srv.URL, "")
+	feed, err := d.UpsertFeed("Example", srv.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("UpsertFeed: %v", err)
 	}

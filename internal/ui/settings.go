@@ -180,6 +180,32 @@ func renderFeedsSection(b *strings.Builder, m *Model, input string) {
 		b.WriteString("\n\n")
 		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
 		return
+	case smAddUsername:
+		b.WriteString(tr.Settings.NewFeedUsername + "\n\n")
+		b.WriteString(input)
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterContinue))
+		return
+	case smAddPassword:
+		b.WriteString(tr.Settings.NewFeedPassword + "\n\n")
+		b.WriteString(input)
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
+		return
+	case smEditCredentials:
+		b.WriteString(tr.Settings.EditCredentials + "\n\n")
+		b.WriteString(tr.Settings.NewFeedUsername + "\n\n")
+		b.WriteString(input)
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterContinue))
+		return
+	case smEditPassword:
+		b.WriteString(tr.Settings.EditCredentials + "\n\n")
+		b.WriteString(tr.Settings.NewFeedPassword + "\n\n")
+		b.WriteString(input)
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
+		return
 	case smRename:
 		b.WriteString(tr.Settings.RenameFeed + "\n\n")
 		b.WriteString(input)
@@ -229,12 +255,17 @@ func renderFeedsSection(b *strings.Builder, m *Model, input string) {
 			}
 			prefix := "    "
 			nameStyle := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
+			lockIcon := ""
+			if f.Username != "" || f.Password != "" {
+				lockIcon = "🔒 "
+			}
 			if i == m.settingsSel {
 				prefix = "  › "
 				nameStyle = itemSelected
 			}
-			line := fmt.Sprintf("%s%s  %s",
+			line := fmt.Sprintf("%s%s%s  %s",
 				prefix,
+				lockIcon,
 				nameStyle.Render(f.Name),
 				settingsURL.Render(f.URL),
 			)

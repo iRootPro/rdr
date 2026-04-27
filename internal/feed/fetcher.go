@@ -46,7 +46,7 @@ func New(d *db.DB) *Fetcher {
 }
 
 func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, error) {
-	body, err := f.get(ctx, feed.URL)
+	body, err := f.getWithCreds(ctx, feed.URL, feed.Username, feed.Password)
 	if err != nil {
 		return FetchResult{}, err
 	}
@@ -191,11 +191,18 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]FetchResult, error) {
 }
 
 func (f *Fetcher) get(ctx context.Context, url string) (io.ReadCloser, error) {
+	return f.getWithCreds(ctx, url, "", "")
+}
+
+func (f *Fetcher) getWithCreds(ctx context.Context, url, username, password string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", userAgent)
+	if username != "" && password != "" {
+		req.SetBasicAuth(username, password)
+	}
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("http get: %w", err)

@@ -386,7 +386,7 @@ func (m Model) updateCatalog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, m.showToast(m.tr.Catalog.Added + ": " + entry.Name)
 			}
 		}
-		_, err := m.db.UpsertFeed(entry.Name, entry.URL, entry.Category)
+		_, err := m.db.UpsertFeed(entry.Name, entry.URL, entry.Category, "", "")
 		if err != nil {
 			m.err = err
 			return m, nil

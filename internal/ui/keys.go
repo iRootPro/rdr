@@ -283,6 +283,7 @@ func fullHelpFor(f focus, tr *i18n.Strings, inLibrary bool) []helpSection {
 					{"d", h.DescFeedsDel},
 					{"e", h.DescFeedsRename},
 					{"c", h.DescFeedsCategory},
+					{"p", h.DescFeedsCredentials},
 					{"i", h.DescFeedsImport},
 					{"E", h.DescFeedsExport},
 					{"esc", h.DescFeedsClose},
