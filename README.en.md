@@ -14,6 +14,8 @@ Vim-style navigation, full article reading, smart folders, query language search
 
 ![rdr demo](demo/demo_en.gif)
 
+📺 Full video demo (50 sec): [demo/using.mp4](demo/using.mp4)
+
 ## Features
 
 - Split-pane interface: feeds on the left, articles on the right

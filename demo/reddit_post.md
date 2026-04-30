@@ -6,6 +6,8 @@ I built a terminal RSS reader with vim keybindings, AI translation, and a built-
 
 Hey everyone! I've been working on **rdr** — a TUI RSS/Atom reader built with Go (Bubble Tea + Lip Gloss). I wanted something fast, keyboard-driven, and that works well over SSH.
 
+📺 50-second demo video attached (browsing feeds, opening an article, settings).
+
 ## What it does
 
 - **Split-pane layout** — feeds on the left, articles on the right, full-screen reader
@@ -53,3 +55,7 @@ Would love feedback! What features would you want in a terminal RSS reader?
 - r/golang — Go community
 - r/linux — terminal users
 - r/selfhosted — RSS reader users
+
+# Video to upload
+
+Use `demo/using_reddit.mp4` (1920×1186, 5.8 MB, h264 + silent audio track for player compatibility). Reddit re-encodes server-side — keep the higher-bitrate version.

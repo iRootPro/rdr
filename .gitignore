@@ -13,3 +13,6 @@
 .DS_Store
 .vscode/
 .idea/
+
+# raw screen recordings (heavy, encoded versions live as demo/*.mp4)
+demo/*.mov
