@@ -38,6 +38,11 @@ type articleMarkedMsg struct {
 	unread    bool // true when this was a mark-unread op
 }
 
+type undoAppliedMsg struct {
+	articleID int64
+	unread    bool // restored read state: true means now unread
+}
+
 type feedMarkedReadMsg struct {
 	feedID int64
 	count  int

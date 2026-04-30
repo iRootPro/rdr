@@ -8,20 +8,20 @@ import (
 )
 
 type keyMap struct {
-	Quit       key.Binding
-	Up         key.Binding
-	Down       key.Binding
-	Left       key.Binding
-	Right      key.Binding
-	Tab        key.Binding
-	Top        key.Binding
-	Bottom     key.Binding
-	PageUp     key.Binding
-	PageDown   key.Binding
-	Enter      key.Binding
-	Back       key.Binding
-	RefreshOne key.Binding
-	RefreshAll key.Binding
+	Quit        key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	Left        key.Binding
+	Right       key.Binding
+	Tab         key.Binding
+	Top         key.Binding
+	Bottom      key.Binding
+	PageUp      key.Binding
+	PageDown    key.Binding
+	Enter       key.Binding
+	Back        key.Binding
+	RefreshOne  key.Binding
+	RefreshAll  key.Binding
 	OpenURL     key.Binding
 	FullArticle key.Binding
 	Settings    key.Binding
@@ -40,6 +40,7 @@ type keyMap struct {
 	PrevArticle   key.Binding
 	LinkPicker    key.Binding
 	ToggleRead    key.Binding
+	Undo          key.Binding
 	MarkAllRead   key.Binding
 	YankURL       key.Binding
 	YankMarkdown  key.Binding
@@ -55,20 +56,20 @@ func defaultKeys(tr *i18n.Strings) keyMap {
 	// a→ф s→ы d→в f→а g→п h→р j→о k→л l→д
 	// z→я x→ч c→с v→м b→и n→т m→ь
 	return keyMap{
-		Quit:       key.NewBinding(key.WithKeys("q", "й", "ctrl+c"), key.WithHelp("q", k.Quit)),
-		Up:         key.NewBinding(key.WithKeys("k", "л", "up"), key.WithHelp("k", k.Up)),
-		Down:       key.NewBinding(key.WithKeys("j", "о", "down"), key.WithHelp("j", k.Down)),
-		Left:       key.NewBinding(key.WithKeys("h", "р", "left"), key.WithHelp("h", k.Back)),
-		Right:      key.NewBinding(key.WithKeys("l", "д", "right"), key.WithHelp("l", k.Forward)),
-		Tab:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", k.SwitchPane)),
-		Top:        key.NewBinding(key.WithKeys("g", "п", "home"), key.WithHelp("g", k.Top)),
-		Bottom:     key.NewBinding(key.WithKeys("G", "П", "end"), key.WithHelp("G", k.Bottom)),
-		PageUp:     key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", k.PageUp)),
-		PageDown:   key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", k.PageDown)),
-		Enter:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", k.Open)),
-		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", k.Esc)),
-		RefreshOne: key.NewBinding(key.WithKeys("r", "к"), key.WithHelp("r", k.RefreshOne)),
-		RefreshAll: key.NewBinding(key.WithKeys("R", "К"), key.WithHelp("R", k.RefreshAll)),
+		Quit:        key.NewBinding(key.WithKeys("q", "й", "ctrl+c"), key.WithHelp("q", k.Quit)),
+		Up:          key.NewBinding(key.WithKeys("k", "л", "up"), key.WithHelp("k", k.Up)),
+		Down:        key.NewBinding(key.WithKeys("j", "о", "down"), key.WithHelp("j", k.Down)),
+		Left:        key.NewBinding(key.WithKeys("h", "р", "left"), key.WithHelp("h", k.Back)),
+		Right:       key.NewBinding(key.WithKeys("l", "д", "right"), key.WithHelp("l", k.Forward)),
+		Tab:         key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", k.SwitchPane)),
+		Top:         key.NewBinding(key.WithKeys("g", "п", "home"), key.WithHelp("g", k.Top)),
+		Bottom:      key.NewBinding(key.WithKeys("G", "П", "end"), key.WithHelp("G", k.Bottom)),
+		PageUp:      key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", k.PageUp)),
+		PageDown:    key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", k.PageDown)),
+		Enter:       key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", k.Open)),
+		Back:        key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", k.Esc)),
+		RefreshOne:  key.NewBinding(key.WithKeys("r", "к"), key.WithHelp("r", k.RefreshOne)),
+		RefreshAll:  key.NewBinding(key.WithKeys("R", "К"), key.WithHelp("R", k.RefreshAll)),
 		OpenURL:     key.NewBinding(key.WithKeys("o", "щ"), key.WithHelp("o", k.OpenBrowser)),
 		FullArticle: key.NewBinding(key.WithKeys("f", "а"), key.WithHelp("f", k.FullArticle)),
 		Settings:    key.NewBinding(key.WithKeys("s", "ы"), key.WithHelp("s", k.Settings)),
@@ -87,6 +88,7 @@ func defaultKeys(tr *i18n.Strings) keyMap {
 		PrevArticle:   key.NewBinding(key.WithKeys("K", "Л"), key.WithHelp("K", k.PrevArticle)),
 		LinkPicker:    key.NewBinding(key.WithKeys("L", "Д"), key.WithHelp("L", k.LinkPicker)),
 		ToggleRead:    key.NewBinding(key.WithKeys("x", "ч"), key.WithHelp("x", k.ToggleRead)),
+		Undo:          key.NewBinding(key.WithKeys("U", "Г"), key.WithHelp("U", k.Undo)),
 		MarkAllRead:   key.NewBinding(key.WithKeys("X", "Ч"), key.WithHelp("X", k.MarkAllRead)),
 		YankURL:       key.NewBinding(key.WithKeys("y", "н"), key.WithHelp("y", k.YankURL)),
 		YankMarkdown:  key.NewBinding(key.WithKeys("Y", "Н"), key.WithHelp("Y", k.YankMarkdown)),
@@ -159,7 +161,7 @@ func shortHelpFor(f focus, k keyMap, inLibrary bool) []key.Binding {
 	case focusFeeds:
 		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Search, k.Help, k.Quit}
 	case focusArticles:
-		base := []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Star}
+		base := []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Undo, k.Star}
 		if inLibrary {
 			base = append(base, k.DeleteLibrary)
 		}
@@ -221,6 +223,7 @@ func fullHelpFor(f focus, tr *i18n.Strings, inLibrary bool) []helpSection {
 		}
 		articleEntries := []helpEntry{
 			{"x / X", h.DescToggleMarkAll},
+			{"U", h.DescUndo},
 			{"m", h.DescToggleStar},
 			{"p", h.DescTogglePreview},
 			{"y / Y", h.DescYankURLMD},
@@ -260,6 +263,7 @@ func fullHelpFor(f focus, tr *i18n.Strings, inLibrary bool) []helpSection {
 			{"o", h.DescOpenBrowser},
 			{"y / Y", h.DescYankURLMD},
 			{"x", h.DescToggleRead},
+			{"U", h.DescUndo},
 			{"m", h.DescToggleStar},
 			{":images", h.DescToggleImages},
 		}

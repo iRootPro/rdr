@@ -59,9 +59,9 @@ type CatalogStrings struct {
 	Welcome3 string // what to do now
 
 	// Default smart folder names (created on onboarding).
-	FolderInbox    string
-	FolderToday    string
-	FolderThisWeek string
+	FolderInbox     string
+	FolderToday     string
+	FolderThisWeek  string
 	FolderStarred   string
 	FolderReadLater string
 }
@@ -106,12 +106,12 @@ type SettingsStrings struct {
 	SmartFolderEditName  string
 	SmartFolderEditQuery string
 
-	GeneralHint   string
-	LanguageLabel string
-	ImagesLabel   string
-	SortLabel     string
-	PreviewLabel  string
-	ThemeLabel    string
+	GeneralHint    string
+	LanguageLabel  string
+	ImagesLabel    string
+	SortLabel      string
+	PreviewLabel   string
+	ThemeLabel     string
 	RefreshLabel   string
 	RefreshOff     string
 	RefreshFmt     string // "%d min"
@@ -146,22 +146,22 @@ type SortStrings struct {
 }
 
 type HelpStrings struct {
-	TitleFmt        string // "rdr · help · %s"
-	Footer          string
-	SectionGlobal   string
-	SectionNav      string
-	SectionArticle  string
-	SectionFilters  string
-	SectionReader   string
+	TitleFmt              string // "rdr · help · %s"
+	Footer                string
+	SectionGlobal         string
+	SectionNav            string
+	SectionArticle        string
+	SectionFilters        string
+	SectionReader         string
 	SectionFeedSet        string
 	SectionFoldersSet     string
 	SectionSmartFolderSet string
 	SectionSearch         string
-	SectionQuerySyn string
-	SectionCommand  string
-	SectionCommon   string
-	SectionLinks    string
-	SectionHelp     string
+	SectionQuerySyn       string
+	SectionCommand        string
+	SectionCommon         string
+	SectionLinks          string
+	SectionHelp           string
 
 	DescDownUp          string
 	DescSwitchPane      string
@@ -184,6 +184,7 @@ type HelpStrings struct {
 	DescLoadFull        string
 	DescLinkPicker      string
 	DescToggleRead      string
+	DescUndo            string
 	DescToggleImages    string
 	DescTogglePreview   string
 	DescFeedsDownUp     string
@@ -241,43 +242,44 @@ type HelpStrings struct {
 }
 
 type KeysStrings struct {
-	Quit          string
-	Up            string
-	Down          string
-	Back          string
-	Forward       string
-	SwitchPane    string
-	Top           string
-	Bottom        string
-	PageUp        string
-	PageDown      string
-	Open          string
-	Esc           string
-	RefreshOne    string
-	RefreshAll    string
-	OpenBrowser   string
-	FullArticle   string
-	Settings      string
-	Search        string
-	Help          string
-	NextUnread    string
-	Zen           string
-	Command       string
+	Quit           string
+	Up             string
+	Down           string
+	Back           string
+	Forward        string
+	SwitchPane     string
+	Top            string
+	Bottom         string
+	PageUp         string
+	PageDown       string
+	Open           string
+	Esc            string
+	RefreshOne     string
+	RefreshAll     string
+	OpenBrowser    string
+	FullArticle    string
+	Settings       string
+	Search         string
+	Help           string
+	NextUnread     string
+	Zen            string
+	Command        string
 	ToggleStar     string
 	ToggleBookmark string
-	FilterAll     string
-	FilterUnread  string
-	FilterStarred string
-	NextArticle   string
-	PrevArticle   string
-	LinkPicker    string
-	ToggleRead    string
-	MarkAllRead   string
-	YankURL       string
-	YankMarkdown  string
-	ToggleFold    string
-	AddLibrary    string
-	DeleteLibrary string
+	FilterAll      string
+	FilterUnread   string
+	FilterStarred  string
+	NextArticle    string
+	PrevArticle    string
+	LinkPicker     string
+	ToggleRead     string
+	Undo           string
+	MarkAllRead    string
+	YankURL        string
+	YankMarkdown   string
+	ToggleFold     string
+	AddLibrary     string
+	DeleteLibrary  string
 }
 
 type ToastsStrings struct {
@@ -288,6 +290,8 @@ type ToastsStrings struct {
 	MarkedRead       string
 	MarkedUnread     string
 	MarkedReadFmt    string // "marked %d read"
+	Undone           string
+	NothingToUndo    string
 	URLCopied        string
 	MarkdownCopied   string
 	CopiedFmt        string // "copied %d %s"
@@ -369,55 +373,55 @@ type ReaderStrings struct {
 }
 
 type CommandStrings struct {
-	NoMatching   string
-	MoreFmt      string // "  … +%d more"
-	HelpSync     string
-	HelpRefresh  string
-	HelpSortDate string
-	HelpSortTitle string
-	HelpSortReverse string
-	HelpFilterAll string
-	HelpFilterUnread string
+	NoMatching        string
+	MoreFmt           string // "  … +%d more"
+	HelpSync          string
+	HelpRefresh       string
+	HelpSortDate      string
+	HelpSortTitle     string
+	HelpSortReverse   string
+	HelpFilterAll     string
+	HelpFilterUnread  string
 	HelpFilterStarred string
-	HelpStar       string
-	HelpBookmark   string
-	HelpUnbookmark string
-	HelpRead     string
-	HelpUnread   string
-	HelpUnstar   string
-	HelpCopyURL  string
-	HelpCopyMD   string
-	HelpImport   string
-	HelpExport   string
-	HelpImages    string
-	HelpRetention string
-	HelpCollapseAll string
-	HelpExpandAll string
-	HelpZen      string
-	HelpHelp     string
-	HelpDiscover string
-	HelpSettings string
-	HelpSearch   string
-	HelpQuit     string
-	HelpQuitAlias string
+	HelpStar          string
+	HelpBookmark      string
+	HelpUnbookmark    string
+	HelpRead          string
+	HelpUnread        string
+	HelpUnstar        string
+	HelpCopyURL       string
+	HelpCopyMD        string
+	HelpImport        string
+	HelpExport        string
+	HelpImages        string
+	HelpRetention     string
+	HelpCollapseAll   string
+	HelpExpandAll     string
+	HelpZen           string
+	HelpHelp          string
+	HelpDiscover      string
+	HelpSettings      string
+	HelpSearch        string
+	HelpQuit          string
+	HelpQuitAlias     string
 }
 
 type SearchStrings struct {
-	Title           string
-	PreviewTitle    string
-	NoArticles      string
-	NoArticlesHint  string
-	NoMatches       string
-	NoMatchesHint   string
-	NoSelection     string
-	ResultsFmt      string // "%d/%d results"
-	NoPreviewHint   string
-	SyntaxHint      string
+	Title          string
+	PreviewTitle   string
+	NoArticles     string
+	NoArticlesHint string
+	NoMatches      string
+	NoMatchesHint  string
+	NoSelection    string
+	ResultsFmt     string // "%d/%d results"
+	NoPreviewHint  string
+	SyntaxHint     string
 }
 
 type LinksStrings struct {
-	TitleFmt  string // "Links · %d"
-	NoLinks   string
+	TitleFmt   string // "Links · %d"
+	NoLinks    string
 	FooterHint string
 }
 
@@ -449,22 +453,22 @@ type FiltersStrings struct {
 }
 
 type ErrorsStrings struct {
-	SortNeedsArg      string
-	UnknownSortFmt    string
+	SortNeedsArg        string
+	UnknownSortFmt      string
 	RetentionNeedsArg   string
 	RetentionInvalidFmt string
-	FilterNeedsArg    string
-	UnknownFilterFmt  string
-	ReadNeedsQuery    string
-	UnreadNeedsQuery  string
-	UnstarNeedsQuery  string
-	CopyNeedsArg      string
-	UnknownCopyFmt    string
-	ImportNeedsPath   string
-	ExportNeedsPath   string
-	UnknownCommandFmt string
-	NoURLToCopy       string
-	NoMatches         string
+	FilterNeedsArg      string
+	UnknownFilterFmt    string
+	ReadNeedsQuery      string
+	UnreadNeedsQuery    string
+	UnstarNeedsQuery    string
+	CopyNeedsArg        string
+	UnknownCopyFmt      string
+	ImportNeedsPath     string
+	ExportNeedsPath     string
+	UnknownCommandFmt   string
+	NoURLToCopy         string
+	NoMatches           string
 }
 
 var en = Strings{
@@ -505,12 +509,12 @@ var en = Strings{
 		SmartFolderEditName:  "Rename smart folder:",
 		SmartFolderEditQuery: "Edit smart folder query:",
 
-		GeneralHint:   "j/k select · enter/space toggle · tab section · esc close",
-		LanguageLabel: "Language",
-		ImagesLabel:   "Images",
-		SortLabel:     "Sort",
-		PreviewLabel:  "Preview",
-		ThemeLabel:    "Theme",
+		GeneralHint:    "j/k select · enter/space toggle · tab section · esc close",
+		LanguageLabel:  "Language",
+		ImagesLabel:    "Images",
+		SortLabel:      "Sort",
+		PreviewLabel:   "Preview",
+		ThemeLabel:     "Theme",
 		RefreshLabel:   "Auto-refresh",
 		RefreshOff:     "disabled",
 		RefreshFmt:     "%d min",
@@ -532,22 +536,22 @@ var en = Strings{
 		AINotConfigured: "Not configured — choose provider and set up to enable translation and summarization",
 	},
 	Help: HelpStrings{
-		TitleFmt:        "rdr · help · %s",
-		Footer:          "esc close · ? toggle",
-		SectionGlobal:   "Global",
-		SectionNav:      "Navigation",
-		SectionArticle:  "Article ops",
-		SectionFilters:  "Filters",
-		SectionReader:   "Reader",
+		TitleFmt:              "rdr · help · %s",
+		Footer:                "esc close · ? toggle",
+		SectionGlobal:         "Global",
+		SectionNav:            "Navigation",
+		SectionArticle:        "Article ops",
+		SectionFilters:        "Filters",
+		SectionReader:         "Reader",
 		SectionFeedSet:        "Feed settings",
 		SectionFoldersSet:     "Folder settings",
 		SectionSmartFolderSet: "Smart folder settings",
 		SectionSearch:         "Search picker",
-		SectionQuerySyn: "Query syntax",
-		SectionCommand:  "Command mode",
-		SectionCommon:   "Common commands",
-		SectionLinks:    "Link picker",
-		SectionHelp:     "Help",
+		SectionQuerySyn:       "Query syntax",
+		SectionCommand:        "Command mode",
+		SectionCommon:         "Common commands",
+		SectionLinks:          "Link picker",
+		SectionHelp:           "Help",
 
 		DescDownUp:          "down / up",
 		DescSwitchPane:      "switch pane",
@@ -570,6 +574,7 @@ var en = Strings{
 		DescLoadFull:        "load full article",
 		DescLinkPicker:      "link picker",
 		DescToggleRead:      "toggle read",
+		DescUndo:            "undo last read toggle",
 		DescToggleImages:    "toggle inline images",
 		DescTogglePreview:   "toggle preview popup",
 		DescFeedsDownUp:     "down / up",
@@ -626,43 +631,44 @@ var en = Strings{
 		DescDeleteLibrary:   "delete from Library",
 	},
 	Keys: KeysStrings{
-		Quit:          "quit",
-		Up:            "up",
-		Down:          "down",
-		Back:          "back",
-		Forward:       "forward",
-		SwitchPane:    "switch pane",
-		Top:           "top",
-		Bottom:        "bottom",
-		PageUp:        "page up",
-		PageDown:      "page down",
-		Open:          "open",
-		Esc:           "back",
-		RefreshOne:    "refresh current",
-		RefreshAll:    "refresh all",
-		OpenBrowser:   "open in browser",
-		FullArticle:   "full article",
-		Settings:      "settings",
-		Search:        "search",
-		Help:          "help",
-		NextUnread:    "next unread",
-		Zen:           "zen",
-		Command:       "command",
+		Quit:           "quit",
+		Up:             "up",
+		Down:           "down",
+		Back:           "back",
+		Forward:        "forward",
+		SwitchPane:     "switch pane",
+		Top:            "top",
+		Bottom:         "bottom",
+		PageUp:         "page up",
+		PageDown:       "page down",
+		Open:           "open",
+		Esc:            "back",
+		RefreshOne:     "refresh current",
+		RefreshAll:     "refresh all",
+		OpenBrowser:    "open in browser",
+		FullArticle:    "full article",
+		Settings:       "settings",
+		Search:         "search",
+		Help:           "help",
+		NextUnread:     "next unread",
+		Zen:            "zen",
+		Command:        "command",
 		ToggleStar:     "toggle star",
 		ToggleBookmark: "read later",
 		FilterAll:      "all articles",
-		FilterUnread:  "unread only",
-		FilterStarred: "starred only",
-		NextArticle:   "next article",
-		PrevArticle:   "prev article",
-		LinkPicker:    "links",
-		ToggleRead:    "toggle read",
-		MarkAllRead:   "mark all read",
-		YankURL:       "yank URL",
-		YankMarkdown:  "yank [title](url)",
-		ToggleFold:    "collapse category",
-		AddLibrary:    "save URL",
-		DeleteLibrary: "delete from Library",
+		FilterUnread:   "unread only",
+		FilterStarred:  "starred only",
+		NextArticle:    "next article",
+		PrevArticle:    "prev article",
+		LinkPicker:     "links",
+		ToggleRead:     "toggle read",
+		Undo:           "undo",
+		MarkAllRead:    "mark all read",
+		YankURL:        "yank URL",
+		YankMarkdown:   "yank [title](url)",
+		ToggleFold:     "collapse category",
+		AddLibrary:     "save URL",
+		DeleteLibrary:  "delete from Library",
 	},
 	Toasts: ToastsStrings{
 		Starred:          "★ starred",
@@ -672,6 +678,8 @@ var en = Strings{
 		MarkedRead:       "marked read",
 		MarkedUnread:     "marked unread",
 		MarkedReadFmt:    "marked %d read",
+		Undone:           "undone",
+		NothingToUndo:    "nothing to undo",
 		URLCopied:        "URL copied",
 		MarkdownCopied:   "markdown copied",
 		CopiedFmt:        "copied %d %s",
@@ -827,18 +835,18 @@ var en = Strings{
 		UnknownSortFmt:      "unknown sort field %q",
 		RetentionNeedsArg:   ":retention needs a number of days or 'off'",
 		RetentionInvalidFmt: "invalid retention value %q",
-		FilterNeedsArg:    ":filter needs all|unread|starred",
-		UnknownFilterFmt:  "unknown filter %q",
-		ReadNeedsQuery:    ":read needs a query",
-		UnreadNeedsQuery:  ":unread needs a query",
-		UnstarNeedsQuery:  ":unstar needs a query",
-		CopyNeedsArg:      ":copy needs: url|md <query>",
-		UnknownCopyFmt:    "unknown copy format %q, expected url|md",
-		ImportNeedsPath:   ":import needs a path",
-		ExportNeedsPath:   ":export needs a path",
-		UnknownCommandFmt: "unknown command %q",
-		NoURLToCopy:       "no URL to copy",
-		NoMatches:         "no matches",
+		FilterNeedsArg:      ":filter needs all|unread|starred",
+		UnknownFilterFmt:    "unknown filter %q",
+		ReadNeedsQuery:      ":read needs a query",
+		UnreadNeedsQuery:    ":unread needs a query",
+		UnstarNeedsQuery:    ":unstar needs a query",
+		CopyNeedsArg:        ":copy needs: url|md <query>",
+		UnknownCopyFmt:      "unknown copy format %q, expected url|md",
+		ImportNeedsPath:     ":import needs a path",
+		ExportNeedsPath:     ":export needs a path",
+		UnknownCommandFmt:   "unknown command %q",
+		NoURLToCopy:         "no URL to copy",
+		NoMatches:           "no matches",
 	},
 	Common: CommonStrings{
 		On:  "on",
@@ -861,9 +869,9 @@ var en = Strings{
 		Welcome2: "A terminal RSS reader with vim-style navigation, full article rendering, smart folders, and search with a query language.",
 		Welcome3: "Pick a few feeds below to get started. Press Enter to subscribe, then Esc to start reading.",
 
-		FolderInbox:    "Inbox",
-		FolderToday:    "Today",
-		FolderThisWeek: "This Week",
+		FolderInbox:     "Inbox",
+		FolderToday:     "Today",
+		FolderThisWeek:  "This Week",
 		FolderStarred:   "Starred",
 		FolderReadLater: "Read Later",
 	},
@@ -918,12 +926,12 @@ var ru = Strings{
 		SmartFolderEditName:  "Переименовать умную папку:",
 		SmartFolderEditQuery: "Изменить запрос:",
 
-		GeneralHint:   "j/k выбрать · enter/space переключить · tab раздел · esc закрыть",
-		LanguageLabel: "Язык",
-		ImagesLabel:   "Картинки",
-		SortLabel:     "Сортировка",
-		PreviewLabel:  "Превью",
-		ThemeLabel:    "Тема",
+		GeneralHint:    "j/k выбрать · enter/space переключить · tab раздел · esc закрыть",
+		LanguageLabel:  "Язык",
+		ImagesLabel:    "Картинки",
+		SortLabel:      "Сортировка",
+		PreviewLabel:   "Превью",
+		ThemeLabel:     "Тема",
 		RefreshLabel:   "Автообновление",
 		RefreshOff:     "отключено",
 		RefreshFmt:     "%d мин",
@@ -945,22 +953,22 @@ var ru = Strings{
 		AINotConfigured: "Не настроен — выберите провайдер и настройте для перевода и суммаризации",
 	},
 	Help: HelpStrings{
-		TitleFmt:        "rdr · справка · %s",
-		Footer:          "esc закрыть · ? переключить",
-		SectionGlobal:   "Общее",
-		SectionNav:      "Навигация",
-		SectionArticle:  "Статья",
-		SectionFilters:  "Фильтры",
-		SectionReader:   "Читалка",
+		TitleFmt:              "rdr · справка · %s",
+		Footer:                "esc закрыть · ? переключить",
+		SectionGlobal:         "Общее",
+		SectionNav:            "Навигация",
+		SectionArticle:        "Статья",
+		SectionFilters:        "Фильтры",
+		SectionReader:         "Читалка",
 		SectionFeedSet:        "Настройки лент",
 		SectionFoldersSet:     "Настройки папок",
 		SectionSmartFolderSet: "Настройки умных папок",
 		SectionSearch:         "Поиск",
-		SectionQuerySyn: "Синтаксис запросов",
-		SectionCommand:  "Командная строка",
-		SectionCommon:   "Частые команды",
-		SectionLinks:    "Выбор ссылок",
-		SectionHelp:     "Справка",
+		SectionQuerySyn:       "Синтаксис запросов",
+		SectionCommand:        "Командная строка",
+		SectionCommon:         "Частые команды",
+		SectionLinks:          "Выбор ссылок",
+		SectionHelp:           "Справка",
 
 		DescDownUp:          "вниз / вверх",
 		DescSwitchPane:      "переключить панель",
@@ -983,6 +991,7 @@ var ru = Strings{
 		DescLoadFull:        "загрузить полную статью",
 		DescLinkPicker:      "выбор ссылок",
 		DescToggleRead:      "переключить прочитано",
+		DescUndo:            "отменить последнее x",
 		DescToggleImages:    "переключить картинки",
 		DescTogglePreview:   "переключить окно превью",
 		DescFeedsDownUp:     "вниз / вверх",
@@ -1039,43 +1048,44 @@ var ru = Strings{
 		DescDeleteLibrary:   "удалить из библиотеки",
 	},
 	Keys: KeysStrings{
-		Quit:          "выход",
-		Up:            "вверх",
-		Down:          "вниз",
-		Back:          "назад",
-		Forward:       "вперёд",
-		SwitchPane:    "переключить панель",
-		Top:           "в начало",
-		Bottom:        "в конец",
-		PageUp:        "страница вверх",
-		PageDown:      "страница вниз",
-		Open:          "открыть",
-		Esc:           "назад",
-		RefreshOne:    "обновить текущую",
-		RefreshAll:    "обновить все",
-		OpenBrowser:   "открыть в браузере",
-		FullArticle:   "полная статья",
-		Settings:      "настройки",
-		Search:        "поиск",
-		Help:          "справка",
-		NextUnread:    "следующая непрочитанная",
-		Zen:           "zen",
-		Command:       "команда",
+		Quit:           "выход",
+		Up:             "вверх",
+		Down:           "вниз",
+		Back:           "назад",
+		Forward:        "вперёд",
+		SwitchPane:     "переключить панель",
+		Top:            "в начало",
+		Bottom:         "в конец",
+		PageUp:         "страница вверх",
+		PageDown:       "страница вниз",
+		Open:           "открыть",
+		Esc:            "назад",
+		RefreshOne:     "обновить текущую",
+		RefreshAll:     "обновить все",
+		OpenBrowser:    "открыть в браузере",
+		FullArticle:    "полная статья",
+		Settings:       "настройки",
+		Search:         "поиск",
+		Help:           "справка",
+		NextUnread:     "следующая непрочитанная",
+		Zen:            "zen",
+		Command:        "команда",
 		ToggleStar:     "звезда",
 		ToggleBookmark: "почитать позже",
 		FilterAll:      "все статьи",
-		FilterUnread:  "непрочитанные",
-		FilterStarred: "со звездой",
-		NextArticle:   "следующая статья",
-		PrevArticle:   "предыдущая статья",
-		LinkPicker:    "ссылки",
-		ToggleRead:    "прочитано",
-		MarkAllRead:   "отметить все",
-		YankURL:       "копировать URL",
-		YankMarkdown:  "копировать [title](url)",
-		ToggleFold:    "свернуть категорию",
-		AddLibrary:    "сохранить URL",
-		DeleteLibrary: "удалить из библиотеки",
+		FilterUnread:   "непрочитанные",
+		FilterStarred:  "со звездой",
+		NextArticle:    "следующая статья",
+		PrevArticle:    "предыдущая статья",
+		LinkPicker:     "ссылки",
+		ToggleRead:     "прочитано",
+		Undo:           "отмена",
+		MarkAllRead:    "отметить все",
+		YankURL:        "копировать URL",
+		YankMarkdown:   "копировать [title](url)",
+		ToggleFold:     "свернуть категорию",
+		AddLibrary:     "сохранить URL",
+		DeleteLibrary:  "удалить из библиотеки",
 	},
 	Toasts: ToastsStrings{
 		Starred:          "★ со звездой",
@@ -1085,6 +1095,8 @@ var ru = Strings{
 		MarkedRead:       "прочитано",
 		MarkedUnread:     "непрочитано",
 		MarkedReadFmt:    "прочитано: %d",
+		Undone:           "отменено",
+		NothingToUndo:    "нечего отменять",
 		URLCopied:        "URL скопирован",
 		MarkdownCopied:   "markdown скопирован",
 		CopiedFmt:        "скопировано %d %s",
@@ -1240,18 +1252,18 @@ var ru = Strings{
 		UnknownSortFmt:      "неизвестное поле сортировки %q",
 		RetentionNeedsArg:   ":retention требует число дней или 'off'",
 		RetentionInvalidFmt: "неверное значение retention %q",
-		FilterNeedsArg:    ":filter требует all|unread|starred",
-		UnknownFilterFmt:  "неизвестный фильтр %q",
-		ReadNeedsQuery:    ":read требует запрос",
-		UnreadNeedsQuery:  ":unread требует запрос",
-		UnstarNeedsQuery:  ":unstar требует запрос",
-		CopyNeedsArg:      ":copy требует: url|md <запрос>",
-		UnknownCopyFmt:    "неизвестный формат копирования %q, ожидаю url|md",
-		ImportNeedsPath:   ":import требует путь",
-		ExportNeedsPath:   ":export требует путь",
-		UnknownCommandFmt: "неизвестная команда %q",
-		NoURLToCopy:       "нет URL для копирования",
-		NoMatches:         "совпадений нет",
+		FilterNeedsArg:      ":filter требует all|unread|starred",
+		UnknownFilterFmt:    "неизвестный фильтр %q",
+		ReadNeedsQuery:      ":read требует запрос",
+		UnreadNeedsQuery:    ":unread требует запрос",
+		UnstarNeedsQuery:    ":unstar требует запрос",
+		CopyNeedsArg:        ":copy требует: url|md <запрос>",
+		UnknownCopyFmt:      "неизвестный формат копирования %q, ожидаю url|md",
+		ImportNeedsPath:     ":import требует путь",
+		ExportNeedsPath:     ":export требует путь",
+		UnknownCommandFmt:   "неизвестная команда %q",
+		NoURLToCopy:         "нет URL для копирования",
+		NoMatches:           "совпадений нет",
 	},
 	Common: CommonStrings{
 		On:  "вкл",
@@ -1274,9 +1286,9 @@ var ru = Strings{
 		Welcome2: "Терминальная читалка RSS с vim-навигацией, полнотекстовым чтением статей, умными папками и поиском с языком запросов.",
 		Welcome3: "Выберите ленты ниже, чтобы начать. Enter — подписаться, затем Esc — перейти к чтению.",
 
-		FolderInbox:    "Входящие",
-		FolderToday:    "Сегодня",
-		FolderThisWeek: "За неделю",
+		FolderInbox:     "Входящие",
+		FolderToday:     "Сегодня",
+		FolderThisWeek:  "За неделю",
 		FolderStarred:   "Избранные",
 		FolderReadLater: "Почитать позже",
 	},

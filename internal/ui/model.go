@@ -154,6 +154,11 @@ func filterLabel(f articleFilter, tr *i18n.Strings) string {
 	}
 }
 
+type undoAction struct {
+	articleID     int64
+	restoreUnread bool
+}
+
 type Model struct {
 	db      *db.DB
 	fetcher *feed.Fetcher
@@ -212,18 +217,18 @@ type Model struct {
 	searchPrev    focus
 	searchErr     error
 
-	filter            articleFilter
-	zenMode           bool
-	showImages        bool
-	showPreview       bool
-	themeName         string
+	filter      articleFilter
+	zenMode     bool
+	showImages  bool
+	showPreview bool
+	themeName   string
 
 	// Visual selection mode (vim-style) for the articles pane. When
 	// active, j/k auto-extend a range anchored at visualAnchor, and
 	// actions (x/m/y/Y) apply to every article in the range instead of
 	// just the one under the cursor.
-	visualMode   bool
-	visualAnchor int
+	visualMode        bool
+	visualAnchor      int
 	afterSyncCommands []string
 	aiConfig          ai.Config
 	refreshInterval   time.Duration
@@ -244,6 +249,10 @@ type Model struct {
 	// Vim-style count prefix. Digits accumulate here until the user
 	// presses a movement key, which consumes it as a repeat count.
 	countPrefix int
+
+	// Single-level undo for accidental read/unread toggles.
+	lastUndo               *undoAction
+	pendingSelectArticleID int64
 
 	commandInput   textinput.Model
 	commandPrev    focus
@@ -315,23 +324,23 @@ func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, ref
 	tr := i18n.For(lang)
 
 	return Model{
-		db:       database,
-		fetcher:  fetcher,
-		tr:       tr,
-		lang:     lang,
-		keys:     defaultKeys(tr),
-		status:   tr.Status.Fetching,
-		spin:     s,
-		fetching: true,
-		reader:        viewport.New(0, 0),
-		help:          h,
+		db:                database,
+		fetcher:           fetcher,
+		tr:                tr,
+		lang:              lang,
+		keys:              defaultKeys(tr),
+		status:            tr.Status.Fetching,
+		spin:              s,
+		fetching:          true,
+		reader:            viewport.New(0, 0),
+		help:              h,
 		feedErrors:        map[int64]error{},
 		collapsedCats:     readCollapsedCats(home),
 		smartFolders:      smartFolders,
 		afterSyncCommands: afterSyncCommands,
 		refreshInterval:   time.Duration(refreshIntervalMinutes) * time.Minute,
-		aiConfig: loadAIConfig(database),
-		home: home,
+		aiConfig:          loadAIConfig(database),
+		home:              home,
 		settingsInput:     ti,
 		searchInput:       si,
 		commandInput:      ci,
@@ -575,6 +584,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.openLinkPickerOnCurrent()
 			}
 			return m, nil
+		case key.Matches(msg, m.keys.Undo):
+			return m.undoLastAction()
 		case key.Matches(msg, m.keys.ToggleRead):
 			return m.toggleReadOnCurrent()
 		case key.Matches(msg, m.keys.MarkAllRead):
@@ -783,9 +794,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ok && (e.Kind == entryFeed || e.Kind == entryLibrary) && e.FeedID == msg.feedID {
 			m.articles = msg.articles
 			applySort(m.articles, m.sortField, m.sortReverse)
-			if m.selArt >= len(m.articles) {
-				m.selArt = 0
-			}
+			m.clampOrSelectPendingArticle()
 		}
 		return m, nil
 
@@ -795,9 +804,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ok && e.Kind == entryFolder && e.FolderIdx == msg.folderIdx {
 			m.articles = msg.articles
 			applySort(m.articles, m.sortField, m.sortReverse)
-			if m.selArt >= len(m.articles) {
-				m.selArt = 0
-			}
+			m.clampOrSelectPendingArticle()
 		}
 		return m, nil
 
@@ -807,9 +814,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ok && e.Kind == entryCategory && e.Name == msg.name {
 			m.articles = msg.articles
 			applySort(m.articles, m.sortField, m.sortReverse)
-			if m.selArt >= len(m.articles) {
-				m.selArt = 0
-			}
+			m.clampOrSelectPendingArticle()
 		}
 		return m, nil
 
@@ -951,6 +956,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds := []tea.Cmd{loadFeedsCmd(m.db), m.showToast(label)}
 		if m.filter == filterUnread && !msg.unread && len(m.feeds) > 0 {
 			cmds = append(cmds, m.loadCurrentCmd())
+		}
+		return m, tea.Batch(cmds...)
+
+	case undoAppliedMsg:
+		m.err = nil
+		now := time.Now().UTC()
+		updateRead := func(a *db.Article) {
+			if msg.unread {
+				a.ReadAt = nil
+				return
+			}
+			if a.ReadAt == nil {
+				a.ReadAt = &now
+			}
+		}
+		for i := range m.articles {
+			if m.articles[i].ID == msg.articleID {
+				updateRead(&m.articles[i])
+				break
+			}
+		}
+		for i := range m.allArticles {
+			if m.allArticles[i].ID == msg.articleID {
+				updateRead(&m.allArticles[i])
+				break
+			}
+		}
+		if m.readerArt != nil && m.readerArt.ID == msg.articleID {
+			updateRead(m.readerArt)
+		}
+		m.refreshFolderCounts()
+		m.pendingSelectArticleID = msg.articleID
+		cmds := []tea.Cmd{loadFeedsCmd(m.db), loadAllArticlesCmd(m.db), m.showToast(m.tr.Toasts.Undone)}
+		if c := m.loadCurrentCmd(); c != nil {
+			cmds = append(cmds, c)
 		}
 		return m, tea.Batch(cmds...)
 
@@ -2497,22 +2537,50 @@ func (m Model) yankCurrent(markdown bool) (tea.Model, tea.Cmd) {
 
 // toggleReadOnCurrent flips the read state of the article under the cursor
 // (articles list) or the one being read (reader focus). No-op otherwise.
+func (m *Model) clampOrSelectPendingArticle() {
+	if m.pendingSelectArticleID != 0 {
+		for i := range m.articles {
+			if m.articles[i].ID == m.pendingSelectArticleID {
+				m.selArt = i
+				m.pendingSelectArticleID = 0
+				return
+			}
+		}
+		m.pendingSelectArticleID = 0
+	}
+	if m.selArt >= len(m.articles) {
+		m.selArt = 0
+	}
+}
+
+func (m Model) undoLastAction() (tea.Model, tea.Cmd) {
+	if m.lastUndo == nil {
+		return m, m.showToast(m.tr.Toasts.NothingToUndo)
+	}
+	a := *m.lastUndo
+	m.lastUndo = nil
+	return m, undoReadCmd(m.db, a.articleID, a.restoreUnread)
+}
+
 func (m Model) toggleReadOnCurrent() (tea.Model, tea.Cmd) {
 	if m.visualMode && m.focus == focusArticles {
 		return m.applyReadOnVisual()
 	}
 	var (
-		id       int64
-		makeRead bool
+		id        int64
+		makeRead  bool
+		wasUnread bool
 	)
 	switch {
 	case m.focus == focusReader && m.readerArt != nil:
 		id = m.readerArt.ID
-		makeRead = m.readerArt.ReadAt == nil
+		wasUnread = m.readerArt.ReadAt == nil
+		makeRead = wasUnread
 	case m.focus == focusArticles && len(m.articles) > 0:
 		a := m.articles[m.selArt]
 		id = a.ID
-		makeRead = a.ReadAt == nil
+		wasUnread = a.ReadAt == nil
+		makeRead = wasUnread
 		// Advance cursor only when the article will stay visible
 		// after the async reload that always follows.
 		willDisappear := m.filter == filterUnread || m.filter == filterStarred
@@ -2533,6 +2601,7 @@ func (m Model) toggleReadOnCurrent() (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
+	m.lastUndo = &undoAction{articleID: id, restoreUnread: wasUnread}
 	return m, toggleReadCmd(m.db, id, makeRead)
 }
 
@@ -2548,6 +2617,21 @@ func toggleReadCmd(d *db.DB, articleID int64, makeRead bool) tea.Cmd {
 			return errMsg{err}
 		}
 		return articleMarkedMsg{articleID: articleID, unread: !makeRead}
+	}
+}
+
+func undoReadCmd(d *db.DB, articleID int64, restoreUnread bool) tea.Cmd {
+	return func() tea.Msg {
+		var err error
+		if restoreUnread {
+			err = d.MarkUnread(articleID)
+		} else {
+			err = d.MarkRead(articleID)
+		}
+		if err != nil {
+			return errMsg{err}
+		}
+		return undoAppliedMsg{articleID: articleID, unread: restoreUnread}
 	}
 }
 

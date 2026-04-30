@@ -189,6 +189,7 @@ All other operations (`x`, `m`, `b`, `y`, `o`, `t`, `Ctrl+s`) work the same as f
 |-----|--------|
 | `enter` | Open article |
 | `x` | Toggle read/unread |
+| `U` | Undo the last `x` read toggle |
 | `X` | Mark all read |
 | `m` | Toggle star |
 | `b` | Read later (bookmark) |
@@ -216,6 +217,8 @@ All other operations (`x`, `m`, `b`, `y`, `o`, `t`, `Ctrl+s`) work the same as f
 | `y` / `Y` | Copy URL / markdown |
 | `t` | Translate article (AI) |
 | `Ctrl+s` | Summarize article (AI) |
+| `x` | Toggle read/unread |
+| `U` | Undo the last `x` read toggle |
 | `x` | Toggle read |
 | `m` | Toggle star |
 | `esc` | Back to list |
