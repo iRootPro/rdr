@@ -298,7 +298,7 @@ Invoked via `:` (command mode). Tab autocomplete available.
 
 ## AI: Translation & Summarization
 
-rdr supports article translation and summarization via OpenAI-compatible APIs and local CLI providers: Claude Code, pi, and opencode.
+rdr supports article translation and summarization via OpenAI-compatible APIs and local CLI providers: Claude Code, pi, and opencode. See [`docs/ai.en.md`](docs/ai.en.md) for details.
 
 ### Setup
 
