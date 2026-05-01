@@ -44,9 +44,9 @@ func translateCmd(cfg ai.Config, text, targetLang string) tea.Cmd {
 }
 
 // summarizeCmd creates a tea.Cmd that summarizes article text.
-func summarizeCmd(cfg ai.Config, text, lang string) tea.Cmd {
+func summarizeCmd(cfg ai.Config, text string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := ai.Summarize(context.Background(), cfg, text, lang)
+		result, err := ai.Summarize(context.Background(), cfg, text)
 		if err != nil {
 			return aiErrorMsg{err}
 		}
@@ -58,14 +58,6 @@ func summarizeCmd(cfg ai.Config, text, lang string) tea.Cmd {
 // current UI language: if UI is Russian → translate to Russian,
 // otherwise → translate to English.
 func targetLang(lang i18n.Lang) string {
-	if lang == i18n.RU {
-		return "Russian"
-	}
-	return "English"
-}
-
-// langName returns human-readable language name for summarization.
-func langName(lang i18n.Lang) string {
 	if lang == i18n.RU {
 		return "Russian"
 	}
@@ -89,7 +81,21 @@ func articlePlainText(a *db.Article) string {
 type aiRow struct {
 	Label string
 	Value string
-	Key   string // "endpoint", "key", "model"
+	Key   string // "provider", "endpoint", "key", "model"
+}
+
+type aiProviderRow struct {
+	Name  string
+	Value string
+}
+
+func buildAIProviderRows() []aiProviderRow {
+	return []aiProviderRow{
+		{Name: ai.ProviderOpenAI, Value: ai.ProviderOpenAI},
+		{Name: ai.ProviderClaude, Value: ai.ProviderClaude},
+		{Name: ai.ProviderPi, Value: ai.ProviderPi},
+		{Name: ai.ProviderOpencode, Value: ai.ProviderOpencode},
+	}
 }
 
 func buildAIRows(m *Model) []aiRow {
@@ -122,6 +128,9 @@ func renderAISection(b *strings.Builder, m *Model, input string) {
 		b.WriteString(input)
 		b.WriteString("\n\n")
 		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
+		return
+	case smAIProviderPicker:
+		renderAIProviderPicker(b, m)
 		return
 	}
 
@@ -176,21 +185,9 @@ func (m Model) updateSettingsAI(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.settingsAISel >= len(rows) {
 			return m, nil
 		}
-		// Provider toggles between openai/claude instead of text input.
 		if rows[m.settingsAISel].Key == "provider" {
-			if m.aiConfig.Provider == ai.ProviderClaude {
-				m.aiConfig.Provider = ai.ProviderOpenAI
-			} else {
-				m.aiConfig.Provider = ai.ProviderClaude
-			}
-			// Reset fields irrelevant to the new provider.
-			m.aiConfig.Endpoint = ""
-			m.aiConfig.APIKey = ""
-			m.aiConfig.Model = ""
-			_ = m.db.SetAIProvider(m.aiConfig.Provider)
-			_ = m.db.SetAIEndpoint("")
-			_ = m.db.SetAIKey("")
-			_ = m.db.SetAIModel("")
+			m.settingsMode = smAIProviderPicker
+			m.settingsAIProviderSel = initialAIProviderPickerSel(&m)
 			return m, nil
 		}
 		m.settingsMode = smAIEdit
@@ -207,6 +204,102 @@ func (m Model) updateSettingsAI(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 	}
 	return m, nil
+}
+
+func renderAIProviderPicker(b *strings.Builder, m *Model) {
+	tr := m.tr
+	rows := buildAIProviderRows()
+	current := m.aiConfig.Provider
+	if current == "" {
+		current = ai.ProviderOpenAI
+	}
+
+	b.WriteString(settingsTitle.Render(tr.Settings.AIProviderPickerTitle))
+	b.WriteString("\n")
+
+	checkStyle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+	for i, r := range rows {
+		prefix := "  "
+		mark := "  "
+		style := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
+		if i == m.settingsAIProviderSel {
+			prefix = "› "
+			style = itemSelected
+		}
+		if r.Value == current {
+			mark = checkStyle.Render(" ✓")
+		}
+		b.WriteString(prefix + style.Render(r.Name) + mark)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(settingsKeyHint.Render(tr.Settings.AIProviderPickerHint))
+}
+
+func (m Model) updateSettingsAIProviderPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	rows := buildAIProviderRows()
+	switch {
+	case key.Matches(msg, m.keys.Back):
+		m.settingsMode = smList
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.settingsAIProviderSel < len(rows)-1 {
+			m.settingsAIProviderSel++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.settingsAIProviderSel > 0 {
+			m.settingsAIProviderSel--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.settingsAIProviderSel = 0
+		return m, nil
+	case key.Matches(msg, m.keys.Bottom):
+		m.settingsAIProviderSel = len(rows) - 1
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		if m.settingsAIProviderSel < 0 || m.settingsAIProviderSel >= len(rows) {
+			return m, nil
+		}
+		applyAIProviderSelection(&m, rows[m.settingsAIProviderSel].Value)
+		m.settingsMode = smList
+		return m, nil
+	}
+	return m, nil
+}
+
+func initialAIProviderPickerSel(m *Model) int {
+	current := m.aiConfig.Provider
+	if current == "" {
+		current = ai.ProviderOpenAI
+	}
+	for i, r := range buildAIProviderRows() {
+		if r.Value == current {
+			return i
+		}
+	}
+	return 0
+}
+
+func applyAIProviderSelection(m *Model, provider string) {
+	m.aiConfig.Provider = provider
+	_ = m.db.SetAIProvider(provider)
+	if isCLIAIProvider(provider) {
+		m.aiConfig.Endpoint = ""
+		m.aiConfig.APIKey = ""
+		_ = m.db.SetAIEndpoint("")
+		_ = m.db.SetAIKey("")
+	}
+}
+
+func isCLIAIProvider(provider string) bool {
+	switch provider {
+	case ai.ProviderClaude, ai.ProviderPi, ai.ProviderOpencode:
+		return true
+	default:
+		return false
+	}
 }
 
 // submitAIEdit saves the edited AI setting value.

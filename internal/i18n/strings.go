@@ -125,12 +125,14 @@ type SettingsStrings struct {
 	AfterSyncEdit  string
 	NoAfterSync    string
 
-	AIProviderLabel string
-	AIEndpointLabel string
-	AIKeyLabel      string
-	AIModelLabel    string
-	AIHint          string
-	AINotConfigured string
+	AIProviderLabel       string
+	AIEndpointLabel       string
+	AIKeyLabel            string
+	AIModelLabel          string
+	AIHint                string
+	AIProviderPickerTitle string
+	AIProviderPickerHint  string
+	AINotConfigured       string
 }
 
 type CommonStrings struct {
@@ -528,12 +530,14 @@ var en = Strings{
 		AfterSyncEdit:  "Edit command:",
 		NoAfterSync:    "No after-sync commands",
 
-		AIProviderLabel: "Provider",
-		AIEndpointLabel: "Endpoint",
-		AIKeyLabel:      "API Key",
-		AIModelLabel:    "Model",
-		AIHint:          "enter toggle/edit · tab section · esc close",
-		AINotConfigured: "Not configured — choose provider and set up to enable translation and summarization",
+		AIProviderLabel:       "Provider",
+		AIEndpointLabel:       "Endpoint",
+		AIKeyLabel:            "API Key",
+		AIModelLabel:          "Model",
+		AIHint:                "enter pick/edit · tab section · esc close",
+		AIProviderPickerTitle: "Choose AI provider:",
+		AIProviderPickerHint:  "j/k select · enter apply · esc cancel",
+		AINotConfigured:       "Not configured — choose provider and set up to enable translation and summarization",
 	},
 	Help: HelpStrings{
 		TitleFmt:              "rdr · help · %s",
@@ -945,12 +949,14 @@ var ru = Strings{
 		AfterSyncEdit:  "Редактировать команду:",
 		NoAfterSync:    "Нет автокоманд",
 
-		AIProviderLabel: "Провайдер",
-		AIEndpointLabel: "Endpoint",
-		AIKeyLabel:      "API Key",
-		AIModelLabel:    "Модель",
-		AIHint:          "enter переключить/править · tab раздел · esc закрыть",
-		AINotConfigured: "Не настроен — выберите провайдер и настройте для перевода и суммаризации",
+		AIProviderLabel:       "Провайдер",
+		AIEndpointLabel:       "Endpoint",
+		AIKeyLabel:            "API Key",
+		AIModelLabel:          "Модель",
+		AIHint:                "enter выбрать/править · tab раздел · esc закрыть",
+		AIProviderPickerTitle: "Выберите AI-провайдера:",
+		AIProviderPickerHint:  "j/k выбрать · enter применить · esc отмена",
+		AINotConfigured:       "Не настроен — выберите провайдер и настройте для перевода и суммаризации",
 	},
 	Help: HelpStrings{
 		TitleFmt:              "rdr · справка · %s",

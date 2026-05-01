@@ -92,6 +92,7 @@ const (
 	smAfterSyncAdd
 	smAfterSyncEdit
 	smAIEdit
+	smAIProviderPicker
 )
 
 type settingsSection int
@@ -203,6 +204,7 @@ type Model struct {
 	catalogSel                int
 	catalogOnboarding         bool
 	settingsAISel             int
+	settingsAIProviderSel     int
 	logContent                string
 	langPickerSel             int
 	settingsCategoryPickerSel int
@@ -553,7 +555,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.showToast("no text")
 			}
 			tick := m.startBusy(m.tr.Reader.Summarizing)
-			return m, tea.Batch(summarizeCmd(m.aiConfig, text, langName(m.lang)), tick)
+			return m, tea.Batch(summarizeCmd(m.aiConfig, text), tick)
 		case key.Matches(msg, m.keys.OpenURL):
 			var url string
 			switch m.focus {
@@ -1181,6 +1183,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.settingsMode == smCategoryPicker {
 		return m.updateSettingsCategoryPicker(msg)
+	}
+	if m.settingsMode == smAIProviderPicker {
+		return m.updateSettingsAIProviderPicker(msg)
 	}
 	if m.settingsMode != smList {
 		switch {

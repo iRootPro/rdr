@@ -298,7 +298,7 @@ Invoked via `:` (command mode). Tab autocomplete available.
 
 ## AI: Translation & Summarization
 
-rdr supports article translation and summarization via any OpenAI-compatible API.
+rdr supports article translation and summarization via OpenAI-compatible APIs and local CLI providers: Claude Code, pi, and opencode.
 
 ### Setup
 
@@ -306,15 +306,16 @@ Open Settings (`s`) > **AI** tab and configure:
 
 | Parameter | Description |
 |-----------|-------------|
-| Endpoint | API URL (e.g. `http://localhost:11434/v1`) |
-| API Key | API key (optional for local models) |
-| Model | Model name |
+| Provider | `openai`, `claude`, `pi`, or `opencode` |
+| Endpoint | API URL (`openai` only, e.g. `http://localhost:11434/v1`) |
+| API Key | API key (`openai` only, optional for local models) |
+| Model | Model name; CLI providers may leave it empty or use the CLI's own model format |
 
 ### Usage
 
 In the reader:
 - `t` — translate article to the UI language
-- `Ctrl+s` — summarize (3-5 key bullet points)
+- `Ctrl+s` — summarize in the article's language (3-5 key bullet points)
 
 ### Provider Examples
 
@@ -342,7 +343,28 @@ npm install -g @anthropic-ai/claude-code
 claude  # authenticate on first run
 ```
 
-Setup in rdr: Settings (`s`) > AI > Provider → `claude`. Leave Endpoint, API Key, and Model empty — they're not needed. Optionally set a model (e.g. `claude-sonnet-4-20250514`).
+Setup in rdr: Settings (`s`) > AI > Provider → `claude`. Leave Endpoint and API Key empty — they're not needed. Optionally set a model (e.g. `claude-sonnet-4-20250514`).
+
+**pi CLI** (uses your external pi configuration):
+
+Install pi using the project's instructions and configure provider/API credentials outside rdr. For example:
+```bash
+export GEMINI_API_KEY=...
+pi -p "Say hello"
+```
+
+Setup in rdr: Settings (`s`) > AI > Provider → `pi`. Endpoint and API Key are cleared and ignored. Model can be empty, or you can set one such as `google/gemini-2.5-pro` / `anthropic/claude-sonnet-4`.
+
+For translation and summarization, rdr runs pi in a safe one-shot mode: no sessions, tools, context files, extensions, skills, prompt templates, or themes.
+
+**opencode CLI** (uses your external opencode configuration):
+
+Install and authenticate opencode using the project's instructions, then verify the CLI:
+```bash
+opencode run "Say hello"
+```
+
+Setup in rdr: Settings (`s`) > AI > Provider → `opencode`. Endpoint and API Key are cleared and ignored. If Model is empty, opencode uses its own configured default model/agent. To override the model from rdr, set it in opencode format, e.g. `anthropic/claude-sonnet-4`.
 
 **OpenAI** (cloud, paid):
 Provider: `openai`, Endpoint: `https://api.openai.com/v1`, API Key: `sk-...`, Model: `gpt-4o-mini`

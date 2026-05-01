@@ -297,7 +297,7 @@ older:2w            старше 2 недель
 
 ## AI: перевод и суммаризация
 
-rdr поддерживает перевод и суммаризацию статей через любой OpenAI-совместимый API.
+rdr поддерживает перевод и суммаризацию статей через OpenAI-совместимые API и локальные CLI-провайдеры: Claude Code, pi и opencode.
 
 ### Настройка
 
@@ -305,15 +305,16 @@ rdr поддерживает перевод и суммаризацию стат
 
 | Параметр | Описание |
 |----------|----------|
-| Endpoint | URL API (например `http://localhost:11434/v1`) |
-| API Key | Ключ API (необязателен для локальных моделей) |
-| Model | Название модели |
+| Provider | `openai`, `claude`, `pi` или `opencode` |
+| Endpoint | URL API (только для `openai`, например `http://localhost:11434/v1`) |
+| API Key | Ключ API (только для `openai`, необязателен для локальных моделей) |
+| Model | Название модели; для CLI-провайдеров можно оставить пустым или указать модель в формате провайдера |
 
 ### Использование
 
 В читалке:
 - `t` — перевести статью на язык интерфейса
-- `Ctrl+s` — суммаризировать (3-5 ключевых пунктов)
+- `Ctrl+s` — суммаризировать на языке статьи (3-5 ключевых пунктов)
 
 ### Примеры провайдеров
 
@@ -341,7 +342,28 @@ npm install -g @anthropic-ai/claude-code
 claude  # авторизация при первом запуске
 ```
 
-Настройка в rdr: Settings (`s`) > AI > Provider → `claude`. Endpoint, API Key и Model оставьте пустыми — не требуются. По желанию можно указать модель (например `claude-sonnet-4-20250514`).
+Настройка в rdr: Settings (`s`) > AI > Provider → `claude`. Endpoint и API Key оставьте пустыми — не требуются. По желанию можно указать модель (например `claude-sonnet-4-20250514`).
+
+**pi CLI** (использует вашу внешнюю настройку pi):
+
+Установите pi по инструкции проекта и настройте провайдера/API-ключи снаружи rdr. Например:
+```bash
+export GEMINI_API_KEY=...
+pi -p "Say hello"
+```
+
+Настройка в rdr: Settings (`s`) > AI > Provider → `pi`. Endpoint и API Key будут очищены и не используются. Model можно оставить пустым или указать, например `google/gemini-2.5-pro` / `anthropic/claude-sonnet-4`.
+
+Для перевода и суммаризации rdr запускает pi в безопасном одноразовом режиме: без сессий, инструментов, context files, extensions, skills, prompt templates и themes.
+
+**opencode CLI** (использует вашу внешнюю настройку opencode):
+
+Установите и авторизуйте opencode по инструкции проекта, затем проверьте CLI:
+```bash
+opencode run "Say hello"
+```
+
+Настройка в rdr: Settings (`s`) > AI > Provider → `opencode`. Endpoint и API Key будут очищены и не используются. Если Model пустой, opencode использует свою модель/агента из собственной конфигурации. Если нужно переопределить модель из rdr, укажите её в формате opencode, например `anthropic/claude-sonnet-4`.
 
 **OpenAI** (облако, платно):
 Provider: `openai`, Endpoint: `https://api.openai.com/v1`, API Key: `sk-...`, Model: `gpt-4o-mini`
