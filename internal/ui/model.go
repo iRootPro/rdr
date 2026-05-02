@@ -2230,14 +2230,24 @@ func (m Model) View() string {
 			articlePreview = false
 		}
 		if m.focus == focusFeeds {
-			row = renderFeedList(entries, m.selEntry, true, fullW, paneH, m.tr)
+			row = renderFeedList(entries, m.selEntry, true, fullW, paneH, m.tr, m.feedListInfo())
 		} else {
 			row = renderArticleList(m.articles, m.selArt, true, fullW, paneH, m.tr, articlePreview, visualLo, visualHi)
 		}
 	} else {
-		leftW := m.width/3 - 2
-		if leftW < 10 {
-			leftW = 10
+		// Keep the feed navigation compact so the article list gets more
+		// breathing room on wide terminals. The left pane used to be a full
+		// third of the screen, which left a lot of empty space under feeds.
+		leftW := m.width*30/100 - 2
+		minLeftW := 10
+		if m.width >= 90 {
+			minLeftW = 24
+		}
+		if leftW < minLeftW {
+			leftW = minLeftW
+		}
+		if leftW > 58 {
+			leftW = 58
 		}
 		rightW := m.width - leftW - 4
 		if rightW < 10 {
@@ -2250,7 +2260,7 @@ func (m Model) View() string {
 			visualLo, visualHi = m.visualRange()
 			articlePreview = false
 		}
-		left := renderFeedList(entries, m.selEntry, m.focus == focusFeeds, leftW, paneH, m.tr)
+		left := renderFeedList(entries, m.selEntry, m.focus == focusFeeds, leftW, paneH, m.tr, m.feedListInfo())
 		right := renderArticleList(m.articles, m.selArt, m.focus == focusArticles, rightW, paneH, m.tr, articlePreview, visualLo, visualHi)
 		row = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	}
@@ -2966,6 +2976,25 @@ func (m Model) loadCurrentCmd() tea.Cmd {
 func (m Model) helpView() string {
 	raw := m.help.ShortHelpView(shortHelpFor(m.focus, m.keys, m.currentEntryIsLibrary()))
 	return paintLineBG("  "+raw, m.width)
+}
+
+func (m Model) feedListInfo() feedListInfo {
+	provider := strings.TrimSpace(m.aiConfig.Provider)
+	if provider == "" {
+		provider = "openai"
+	}
+	unread := 0
+	for _, a := range m.allArticles {
+		if a.ReadAt == nil {
+			unread++
+		}
+	}
+	return feedListInfo{
+		Status:     m.status,
+		AIProvider: provider,
+		Unread:     unread,
+		Feeds:      len(m.feeds),
+	}
 }
 
 func loadFeedsCmd(d *db.DB) tea.Cmd {

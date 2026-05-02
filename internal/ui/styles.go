@@ -13,7 +13,7 @@ import (
 // rest of the UI uses directly (background, foreground, accents,
 // status colors).
 type Theme struct {
-	Name string
+	Name  string
 	Light bool // true for light palettes — drives glamour style etc.
 
 	BG     lipgloss.Color // primary pane background
@@ -244,7 +244,7 @@ func rebuildCoreStyles() {
 		Foreground(colorMuted).
 		Background(colorBG)
 
-	unreadStyle = lipgloss.NewStyle().Foreground(colorYellow).Background(colorBG)
+	unreadStyle = lipgloss.NewStyle().Foreground(colorText).Background(colorBG).Bold(true)
 	readStyle = lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
 
 	counterStyle = lipgloss.NewStyle().Foreground(colorGreen).Background(colorBG)

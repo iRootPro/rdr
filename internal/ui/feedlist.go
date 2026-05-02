@@ -10,10 +10,17 @@ import (
 	"github.com/iRootPro/rdr/internal/i18n"
 )
 
+type feedListInfo struct {
+	Status     string
+	AIProvider string
+	Unread     int
+	Feeds      int
+}
+
 // renderFeedList draws the unified feeds pane: smart folders at the top with
 // an icon prefix, then a subtle separator, then regular feeds with unread
 // counters. Selection highlights the currently active row.
-func renderFeedList(entries []feedEntry, selected int, active bool, width, height int, tr *i18n.Strings) string {
+func renderFeedList(entries []feedEntry, selected int, active bool, width, height int, tr *i18n.Strings, info feedListInfo) string {
 	if tr == nil {
 		tr = i18n.For(i18n.EN)
 	}
@@ -65,7 +72,18 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 	}
 
 	rowsBudget := listVisibleRows(height)
-	itemBudget := rowsBudget - len(separatorBefore)
+	infoBlock := renderFeedInfoBlock(info, inner, tr)
+	infoRows := 0
+	if infoBlock != "" && rowsBudget >= 18 {
+		infoRows = lipgloss.Height(infoBlock)
+	}
+	listRowsBudget := rowsBudget - infoRows
+	if listRowsBudget < 1 {
+		listRowsBudget = 1
+		infoRows = 0
+		infoBlock = ""
+	}
+	itemBudget := listRowsBudget - len(separatorBefore)
 	if itemBudget < 1 {
 		itemBudget = 1
 	}
@@ -122,10 +140,10 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 			}
 		case entryFeed:
 			fi := feedIcon(e.FeedURL, e.Name)
-			icon = lipgloss.NewStyle().Foreground(colorMuted).Background(rowBG).Render("  "+fi+" ")
+			icon = lipgloss.NewStyle().Foreground(colorMuted).Background(rowBG).Render("  " + fi + " ")
 			iconCells = 4
 			if e.HasError {
-				icon = lipgloss.NewStyle().Foreground(colorRed).Background(rowBG).Render("  "+fi+" ")
+				icon = lipgloss.NewStyle().Foreground(colorRed).Background(rowBG).Render("  " + fi + " ")
 				iconCells = 4
 			}
 		}
@@ -157,12 +175,60 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 	// Pad with blank lines to keep the content height stable regardless
 	// of how many items / separators rendered. Prevents layout jumps
 	// around the folder/feed boundary.
-	for rowsUsed < rowsBudget {
+	for rowsUsed < listRowsBudget {
 		b.WriteString("\n")
 		rowsUsed++
 	}
+	if infoRows > 0 {
+		b.WriteString(infoBlock)
+	}
 
 	return framePaneWithTitle(b.String(), title, active, width, height)
+}
+
+func renderFeedInfoBlock(info feedListInfo, width int, tr *i18n.Strings) string {
+	if width < 18 {
+		return ""
+	}
+	provider := strings.TrimSpace(info.AIProvider)
+	if provider == "" {
+		provider = "openai"
+	}
+	status := strings.TrimSpace(info.Status)
+	if status == "" {
+		status = tr.Status.Ready
+	}
+
+	labelStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
+	valueStyle := lipgloss.NewStyle().Foreground(colorText).Background(colorBG).Bold(true)
+	sepStyle := lipgloss.NewStyle().Foreground(colorBorder).Background(colorBG)
+	lineStyle := lipgloss.NewStyle().Width(width).MaxWidth(width).Background(colorBG)
+
+	rows := []string{
+		sepStyle.Render(strings.Repeat("─", width)),
+		feedInfoLine(tr.Feeds.InfoUnread, fmt.Sprintf("%d", info.Unread), width, labelStyle, valueStyle, lineStyle),
+		feedInfoLine(tr.Feeds.InfoFeeds, fmt.Sprintf("%d", info.Feeds), width, labelStyle, valueStyle, lineStyle),
+		feedInfoLine(tr.Feeds.InfoAI, provider, width, labelStyle, valueStyle, lineStyle),
+		feedInfoLine("", status, width, labelStyle, lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG), lineStyle),
+	}
+	return strings.Join(rows, "\n")
+}
+
+func feedInfoLine(label, value string, width int, labelStyle, valueStyle, lineStyle lipgloss.Style) string {
+	if label == "" {
+		return lineStyle.Render("  " + valueStyle.Render(truncate(value, width-2)))
+	}
+	labelW := 8
+	if width < 26 {
+		labelW = 6
+	}
+	valueW := width - labelW - 3
+	if valueW < 1 {
+		valueW = 1
+	}
+	labelCell := lipgloss.NewStyle().Width(labelW).MaxWidth(labelW).Background(colorBG).Render(labelStyle.Render(label))
+	valueCell := lipgloss.NewStyle().Width(valueW).MaxWidth(valueW).Background(colorBG).Render(valueStyle.Render(truncate(value, valueW)))
+	return lineStyle.Render("  " + labelCell + " " + valueCell)
 }
 
 func maxEntryCounterWidth(entries []feedEntry) int {

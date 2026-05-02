@@ -28,19 +28,15 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		return framePaneWithTitle(b.String(), title, active, width, height)
 	}
 
-	// Reserve a fixed-width right column for time + optional reading
-	// hint. Worst realistic case: "999m·10d ago" ≈ 12 chars; we leave a
-	// 1-char breathing room and an extra cell of space-before so the
-	// title doesn't butt against the timestamps.
+	// Reserve fixed right-side columns for source chip and time + optional
+	// reading hint. Keeping source/time out of the title cell makes rows
+	// scan like a table instead of letting metadata float inside headlines.
 	const whenCellW = 14
-	// Inner text area of the pane = width - 2 (padding inside border).
-	titleCellW := width - 2 - whenCellW
-	if titleCellW < 1 {
-		titleCellW = 1
-	}
+	const maxSourceCellW = 13
+	const columnSepW = 2
 
 	// Detect cross-feed view: if any row carries a FeedName the loader is
-	// a folder/all-articles source, so reserve space for a feed tag.
+	// a folder/all-articles source, so reserve a fixed source column.
 	crossFeed := false
 	for _, a := range articles {
 		if a.FeedName != "" {
@@ -48,21 +44,35 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			break
 		}
 	}
-	feedTagW := 0
-	if crossFeed {
-		feedTagW = 12 // room for "  feedname"
+
+	// Inner text area of the pane = width - 2 (padding inside border).
+	innerW := width - 2
+	sourceCellW := 0
+	if crossFeed && innerW >= 54 {
+		sourceCellW = maxSourceCellW
+	}
+	sepCellW := 0
+	if sourceCellW > 0 && innerW >= 70 {
+		sepCellW = columnSepW
+	}
+	titleCellW := innerW - whenCellW - sourceCellW - sepCellW
+	if titleCellW < 1 {
+		titleCellW = 1
 	}
 
 	// Max length for truncating the title text: subtract the prefix
-	// "› " / "  " (2 cells), the marker "● "/"★ " (2 cells) and the
-	// optional cross-feed tag from the title cell width.
-	titleTextBudget := titleCellW - 4 - feedTagW
+	// "▌ "/"› "/"  " (2 cells) and marker "● "/"★ " (2 cells).
+	titleTextBudget := titleCellW - 4
 	if titleTextBudget < 1 {
 		titleTextBudget = 1
 	}
 
 	now := time.Now()
-	groupStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG).Italic(true)
+	bucketCounts := make(map[string]int)
+	for _, a := range articles {
+		bucketCounts[dateBucket(a.PublishedAt, now, tr)]++
+	}
+	groupStyle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
 
 	rowsBudget := listVisibleRows(height)
 	// Worst case the visible window spans up to 4 date-group boundaries
@@ -95,7 +105,11 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			if rowsUsed+1 >= rowsBudget {
 				break
 			}
-			b.WriteString(groupStyle.Render("── " + bucket + " ──"))
+			label := strings.ToUpper(bucket)
+			if n := bucketCounts[bucket]; n > 0 {
+				label = fmt.Sprintf("%s · %d", label, n)
+			}
+			b.WriteString(groupStyle.Render(" " + label))
 			b.WriteString("\n")
 			rowsUsed++
 			lastBucket = bucket
@@ -109,6 +123,7 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		if i == selected {
 			prefix = "› "
 			if active {
+				prefix = "▌ "
 				titleStyle = itemSelected
 			} else {
 				titleStyle = itemSelectedInactive
@@ -120,9 +135,17 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			rowBG = colorAltBG
 		}
 		rowTitleStyle := titleStyle.Background(rowBG)
-		rowWhenStyle := timeAgoStyle.Background(rowBG)
+		whenFG := colorMuted
+		if i == selected && active {
+			whenFG = colorOrange
+		}
+		rowWhenStyle := lipgloss.NewStyle().Foreground(whenFG).Background(rowBG)
 
-		prefixRendered := lipgloss.NewStyle().Background(rowBG).Render(prefix)
+		prefixStyle := lipgloss.NewStyle().Background(rowBG)
+		if i == selected && active {
+			prefixStyle = prefixStyle.Foreground(colorAccent).Bold(true)
+		}
+		prefixRendered := prefixStyle.Render(prefix)
 		var marker string
 		switch {
 		case a.StarredAt != nil:
@@ -130,38 +153,39 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		case a.BookmarkedAt != nil:
 			marker = lipgloss.NewStyle().Foreground(colorSecondary).Background(rowBG).Render("◆ ")
 		case a.ReadAt == nil:
-			marker = lipgloss.NewStyle().Foreground(colorAccent).Background(rowBG).Render("● ")
+			// Unread state is already conveyed by bold title text. Avoid a
+			// repeated dot on every unread row: in unread-heavy views it turns
+			// into visual noise. Star/bookmark still use explicit markers.
+			marker = lipgloss.NewStyle().Background(rowBG).Render("  ")
 		default:
 			marker = lipgloss.NewStyle().Background(rowBG).Render("  ")
 		}
-		titleText := prefixRendered + marker + rowTitleStyle.Render(truncate(a.Title, titleTextBudget))
-		if crossFeed && a.FeedName != "" {
-			tag := lipgloss.NewStyle().
-				Foreground(colorGreen).
-				Background(rowBG).
-				Render("  " + truncate(a.FeedName, 10))
-			titleText += tag
-		}
-		title := titleText
-		when := rowWhenStyle.Render(timeAgo(a.PublishedAt, tr))
-		// Prepend a small reading-time hint when the body is cached.
+		title := prefixRendered + marker + rowTitleStyle.Render(truncate(a.Title, titleTextBudget))
+		whenText := timeAgo(a.PublishedAt, tr)
+		// Prepend a small reading-time hint when the body is cached. Build
+		// the timestamp as plain text first so long localized labels (e.g.
+		// "13 мин назад") are truncated before styling and never wrap into
+		// a second visual row.
 		if a.CachedBody != "" {
 			if mins := readingMinutes(a.CachedBody); mins > 0 {
-				hint := lipgloss.NewStyle().
-					Foreground(colorMuted).
-					Background(rowBG).
-					Render(fmt.Sprintf("%dm·", mins))
-				when = hint + when
+				whenText = fmt.Sprintf("%dm·%s", mins, whenText)
 			}
 		}
+		when := rowWhenStyle.Render(truncate(whenText, whenCellW))
 
 		titleCellStyle := lipgloss.NewStyle().Width(titleCellW).MaxWidth(titleCellW).Background(rowBG)
 		whenCellStyle := lipgloss.NewStyle().Width(whenCellW).MaxWidth(whenCellW).Align(lipgloss.Right).Background(rowBG)
-		line := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			titleCellStyle.Render(title),
-			whenCellStyle.Render(when),
-		)
+		cells := []string{titleCellStyle.Render(title)}
+		if sepCellW > 0 {
+			sep := lipgloss.NewStyle().Width(sepCellW).MaxWidth(sepCellW).Foreground(colorBorder).Background(rowBG).Render("│ ")
+			cells = append(cells, sep)
+		}
+		if sourceCellW > 0 {
+			sourceCellStyle := lipgloss.NewStyle().Width(sourceCellW).MaxWidth(sourceCellW).Background(rowBG)
+			cells = append(cells, sourceCellStyle.Render(sourceChip(a.FeedName, sourceCellW, i == selected && active, rowBG)))
+		}
+		cells = append(cells, whenCellStyle.Render(when))
+		line := lipgloss.JoinHorizontal(lipgloss.Top, cells...)
 		if i == selected {
 			// Record line index before appending: position the preview
 			// overlay right below this row.
@@ -190,6 +214,36 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	}
 
 	return framePaneWithTitle(body, title, active, width, height)
+}
+
+func sourceChip(name string, cellW int, selected bool, rowBG lipgloss.Color) string {
+	name = compactSourceName(strings.TrimSpace(name))
+	if name == "" || cellW < 3 {
+		return ""
+	}
+	labelW := cellW - 1 // one leading gap before the source label
+	if labelW < 1 {
+		labelW = 1
+	}
+	label := truncate(name, labelW)
+	style := lipgloss.NewStyle().Foreground(colorTeal).Background(rowBG).Bold(true)
+	if selected {
+		style = style.Foreground(colorAccent)
+	}
+	return lipgloss.NewStyle().Background(rowBG).Render(" ") + style.Render(label)
+}
+
+func compactSourceName(name string) string {
+	lower := strings.ToLower(name)
+	switch {
+	case strings.Contains(lower, "hacker news"):
+		return "HN"
+	case strings.Contains(lower, "ixbt"):
+		return "Ixbt"
+	case strings.Contains(lower, "habr"):
+		return "Habr"
+	}
+	return name
 }
 
 // buildArticlePreviewBox renders a bordered floating-style popup with

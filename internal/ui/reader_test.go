@@ -74,6 +74,15 @@ func TestRenderReaderBody_TruncatesLongURL(t *testing.T) {
 	}
 }
 
+func TestReaderDisplayURL_StripsQueryAndFragment(t *testing.T) {
+	raw := "https://habr.com/ru/articles/1030706/?utm_source=habrahabr&utm_medium=rss#comments"
+	got := readerDisplayURL(raw)
+	want := "https://habr.com/ru/articles/1030706/"
+	if got != want {
+		t.Fatalf("readerDisplayURL() = %q, want %q", got, want)
+	}
+}
+
 func TestRenderEmptyReader_ContainsCTABox(t *testing.T) {
 	a := db.Article{Title: "Empty", URL: "https://x", PublishedAt: time.Now()} // no CachedBody, no description
 	out := renderReaderBody(a, "F", "", 70, false, testTR, nil, nil)

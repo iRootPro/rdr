@@ -434,6 +434,9 @@ type FeedsStrings struct {
 	ArticlesPaneTitle string
 	NoArticles        string
 	NoArticlePreview  string
+	InfoUnread        string
+	InfoFeeds         string
+	InfoAI            string
 }
 
 type FocusStrings struct {
@@ -817,6 +820,9 @@ var en = Strings{
 		ArticlesPaneTitle: "Articles",
 		NoArticles:        "(no articles)",
 		NoArticlePreview:  "(no preview available)",
+		InfoUnread:        "Unread",
+		InfoFeeds:         "Feeds",
+		InfoAI:            "AI",
 	},
 	Focus: FocusStrings{
 		Feeds:    "Feeds",
@@ -1236,6 +1242,9 @@ var ru = Strings{
 		ArticlesPaneTitle: "Статьи",
 		NoArticles:        "(статей нет)",
 		NoArticlePreview:  "(нет превью)",
+		InfoUnread:        "Новые",
+		InfoFeeds:         "Ленты",
+		InfoAI:            "AI",
 	},
 	Focus: FocusStrings{
 		Feeds:    "Ленты",

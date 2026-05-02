@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -148,10 +149,11 @@ func renderReaderBody(a db.Article, feedName, feedURL string, contentW int, show
 	b.WriteString(strings.Join(metaParts, readerMetaMuted.Render("  ·  ")))
 	b.WriteString("\n")
 
-	// URL on its own line so it doesn't elbow the title; truncated if
-	// longer than the content column.
+	// URL on its own line so it doesn't elbow the title. Show a cleaned
+	// display URL (no query/fragment) to keep reader mode free of tracking
+	// noise; copy/open actions still use the original article URL.
 	if a.URL != "" {
-		url := a.URL
+		url := readerDisplayURL(a.URL)
 		if lipgloss.Width(url) > contentW {
 			url = truncate(url, contentW-1)
 		}
@@ -207,6 +209,16 @@ func renderReaderBody(a db.Article, feedName, feedURL string, contentW int, show
 // has enough text to show as the main reader body. We count non-HTML
 // words; anything under 20 words is treated as metadata-only (HN stubs)
 // and routed to the empty-state card instead.
+func readerDisplayURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
+}
+
 func hasReadablePreview(a db.Article) bool {
 	return len(strings.Fields(stripHTML(articlePreviewText(a)))) >= 20
 }

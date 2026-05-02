@@ -159,13 +159,13 @@ type helpSection struct {
 func shortHelpFor(f focus, k keyMap, inLibrary bool) []key.Binding {
 	switch f {
 	case focusFeeds:
-		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Search, k.Help, k.Quit}
+		return []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.Search, k.Help}
 	case focusArticles:
-		base := []key.Binding{k.Up, k.Down, k.Tab, k.Enter, k.ToggleRead, k.Undo, k.Star}
+		base := []key.Binding{k.Up, k.Down, k.Enter, k.ToggleRead, k.Star, k.Search}
 		if inLibrary {
 			base = append(base, k.DeleteLibrary)
 		}
-		return append(base, k.Help, k.Quit)
+		return append(base, k.Help)
 	case focusReader:
 		base := []key.Binding{k.Up, k.Down, k.NextArticle, k.PrevArticle, k.FullArticle}
 		if inLibrary {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/iRootPro/rdr/internal/db"
 	"github.com/iRootPro/rdr/internal/i18n"
 )
 
@@ -137,8 +138,32 @@ func renderSettings(m *Model, input string, width, height int) string {
 		renderFeedsSection(&b, m, input)
 	}
 
-	content := fillBackground(b.String(), width-4)
+	contentW := width - 4
+	if contentW < 20 {
+		contentW = 20
+	}
+	renderW := contentW
+	if renderW > 140 {
+		renderW = 140
+	}
+	content := fillBackground(b.String(), renderW)
+	if contentW > renderW {
+		content = indentBlock(content, (contentW-renderW)/2)
+		content = fillBackground(content, contentW)
+	}
 	return paneActive.Width(width - 2).Height(height - 2).Render(content)
+}
+
+func indentBlock(content string, pad int) string {
+	if pad <= 0 {
+		return content
+	}
+	prefix := strings.Repeat(" ", pad)
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 func renderSettingsTabs(tr *i18n.Strings, active settingsSection) string {
@@ -154,12 +179,14 @@ func renderSettingsTabs(tr *i18n.Strings, active settingsSection) string {
 		{tr.Settings.SectionAI, secAI},
 	}
 	sepStyle := lipgloss.NewStyle().Background(colorBG)
+	activeStyle := lipgloss.NewStyle().Foreground(colorBG).Background(colorAccent).Bold(true)
+	inactiveStyle := lipgloss.NewStyle().Foreground(colorMuted).Background(colorBG)
 	var cells []string
 	for _, t := range tabs {
 		if t.sec == active {
-			cells = append(cells, settingsTabActive.Render("["+t.label+"]"))
+			cells = append(cells, activeStyle.Render(" "+t.label+" "))
 		} else {
-			cells = append(cells, settingsTabInactive.Render(" "+t.label+" "))
+			cells = append(cells, inactiveStyle.Render(" "+t.label+" "))
 		}
 	}
 	return strings.Join(cells, sepStyle.Render("  "))
@@ -212,38 +239,140 @@ func renderFeedsSection(b *strings.Builder, m *Model, input string) {
 	if len(m.feeds) == 0 {
 		b.WriteString(readStyle.Render(tr.Settings.NoFeeds))
 	} else {
-		catStyle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
-		lastCat := ""
-		for i, f := range m.feeds {
-			cat := f.Category
-			if cat == "" {
-				cat = "—"
-			}
-			if cat != lastCat {
-				if lastCat != "" {
-					b.WriteString("\n")
-				}
-				b.WriteString(catStyle.Render("▸ "+cat))
-				b.WriteString("\n")
-				lastCat = cat
-			}
-			prefix := "    "
-			nameStyle := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
-			if i == m.settingsSel {
-				prefix = "  › "
-				nameStyle = itemSelected
-			}
-			line := fmt.Sprintf("%s%s  %s",
-				prefix,
-				nameStyle.Render(f.Name),
-				settingsURL.Render(f.URL),
-			)
-			b.WriteString(line)
-			b.WriteString("\n")
+		contentW := m.width - 4
+		if contentW > 140 {
+			contentW = 140
 		}
+		if contentW < 30 {
+			contentW = 30
+		}
+		renderSettingsFeedRows(b, m, contentW)
 	}
 	b.WriteString("\n")
 	b.WriteString(settingsKeyHint.Render(tr.Settings.FeedsHint))
+}
+
+func renderSettingsFeedRows(b *strings.Builder, m *Model, width int) {
+	catStyle := lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG).Bold(true)
+	nameBase := lipgloss.NewStyle().Foreground(colorText).Background(colorBG)
+	urlBase := settingsURL
+	ordered := groupedSettingsFeeds(m.feeds)
+
+	nameW := 0
+	for _, item := range ordered {
+		if item.feedIdx < 0 {
+			continue
+		}
+		if w := lipgloss.Width(item.feed.Name); w > nameW {
+			nameW = w
+		}
+	}
+	if nameW < 14 {
+		nameW = 14
+	}
+	if nameW > 28 {
+		nameW = 28
+	}
+	prefixW := 4
+	gapW := 2
+	urlW := width - prefixW - nameW - gapW
+	if urlW < 8 {
+		urlW = 8
+	}
+	tableW := prefixW + nameW + gapW + urlW
+	if tableW > width {
+		tableW = width
+	}
+
+	for _, item := range ordered {
+		if item.feedIdx < 0 {
+			if item.category != "" && b.Len() > 0 {
+				b.WriteString("\n")
+			}
+			label := "▸ " + strings.ToUpper(item.category)
+			b.WriteString(catStyle.Render(label))
+			b.WriteString("\n")
+			continue
+		}
+
+		f := item.feed
+		rowBG := colorBG
+		prefix := "    "
+		nameStyle := nameBase
+		urlStyle := urlBase
+		if item.feedIdx == m.settingsSel {
+			rowBG = colorAltBG
+			prefix = "  ▌ "
+			nameStyle = itemSelected.Background(rowBG)
+			urlStyle = settingsURL.Background(rowBG)
+		}
+		prefixRendered := lipgloss.NewStyle().Foreground(colorAccent).Background(rowBG).Render(prefix)
+		nameCell := lipgloss.NewStyle().Width(nameW).MaxWidth(nameW).Background(rowBG).
+			Render(nameStyle.Render(truncate(f.Name, nameW)))
+		urlText := displaySettingsURL(f.URL)
+		urlCell := lipgloss.NewStyle().Width(urlW).MaxWidth(urlW).Background(rowBG).
+			Render(urlStyle.Render(truncate(urlText, urlW)))
+		line := lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Background(rowBG).Render(prefixRendered),
+			nameCell,
+			lipgloss.NewStyle().Width(gapW).Background(rowBG).Render("  "),
+			urlCell,
+		)
+		if item.feedIdx == m.settingsSel {
+			line = lipgloss.NewStyle().Width(tableW).MaxWidth(tableW).Background(rowBG).Render(line)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+}
+
+type settingsFeedRow struct {
+	category string
+	feedIdx  int
+	feed     db.Feed
+}
+
+func groupedSettingsFeeds(feeds []db.Feed) []settingsFeedRow {
+	type group struct {
+		category string
+		feeds    []settingsFeedRow
+	}
+	groupsByCat := make(map[string]*group)
+	var order []string
+	for i, f := range feeds {
+		key := f.Category
+		if _, ok := groupsByCat[key]; !ok {
+			groupsByCat[key] = &group{category: displaySettingsCategory(key)}
+			order = append(order, key)
+		}
+		groupsByCat[key].feeds = append(groupsByCat[key].feeds, settingsFeedRow{feedIdx: i, feed: f})
+	}
+	for i, key := range order {
+		if key == "" {
+			order = append(order[:i], order[i+1:]...)
+			order = append(order, "")
+			break
+		}
+	}
+
+	out := make([]settingsFeedRow, 0, len(feeds)+len(order))
+	for _, key := range order {
+		g := groupsByCat[key]
+		out = append(out, settingsFeedRow{category: g.category, feedIdx: -1})
+		out = append(out, g.feeds...)
+	}
+	return out
+}
+
+func displaySettingsCategory(cat string) string {
+	if strings.TrimSpace(cat) == "" {
+		return "—"
+	}
+	return cat
+}
+
+func displaySettingsURL(raw string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(raw, "https://"), "http://")
 }
 
 // categoryPickerRow is one row in the folder picker opened by 'c' on a
