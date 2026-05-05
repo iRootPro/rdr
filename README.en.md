@@ -10,7 +10,7 @@ English | [Русский](README.md)
 
 Terminal RSS/Atom feed reader built with Go, [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
-Vim-style navigation, full article reading, smart folders, query language search, 4 color themes, Russian keyboard layout support.
+Vim-style navigation, full article reading, smart folders, query language search, 6 color themes, Russian keyboard layout support.
 
 ![rdr demo](demo/demo_en.gif)
 
@@ -28,7 +28,7 @@ Vim-style navigation, full article reading, smart folders, query language search
 - Library — save arbitrary URLs outside RSS (`B`, pre-filled from clipboard)
 - Batch operations: mark read, star, bookmark, copy by query
 - OPML import and export
-- 4 themes: Dark (Tokyo Night), Light (Catppuccin Latte), Catppuccin Mocha, Rose Pine
+- 6 themes: Dark (Tokyo Night), Light (Catppuccin Latte), Sepia, Catppuccin Mocha, Rose Pine, Gruvbox
 - Nerd Font icons for sources (GitHub, HN, Habr, Lobsters, etc.)
 - Powerline status bar
 - Localization: English / Russian
@@ -153,7 +153,7 @@ The **Library** section appears at the top of the left pane, above smart folders
 | `D` | Delete an article from Library (only when the Library section is selected) |
 | `f` | Re-fetch full content (if the initial fetch failed) |
 
-All other operations (`x`, `m`, `b`, `y`, `o`, `t`, `Ctrl+s`) work the same as for regular RSS articles.
+All other operations (`x`, `m`, `b`, `y`, `o`, `Ctrl+t`, `Ctrl+s`) work the same as for regular RSS articles.
 
 ### Technical notes
 
@@ -181,6 +181,7 @@ All other operations (`x`, `m`, `b`, `y`, `o`, `t`, `Ctrl+s`) work the same as f
 | `:` | Command mode |
 | `?` | Help |
 | `z` | Zen mode (single pane) |
+| `t` | Cycle theme |
 | `q` | Quit |
 
 ### Article List
@@ -215,7 +216,7 @@ All other operations (`x`, `m`, `b`, `y`, `o`, `t`, `Ctrl+s`) work the same as f
 | `L` | Link picker |
 | `o` | Open URL in browser |
 | `y` / `Y` | Copy URL / markdown |
-| `t` | Translate article (AI) |
+| `Ctrl+t` | Translate article (AI) |
 | `Ctrl+s` | Summarize article (AI) |
 | `x` | Toggle read/unread |
 | `U` | Undo the last `x` read toggle |
@@ -314,7 +315,7 @@ Open Settings (`s`) > **AI** tab and configure:
 ### Usage
 
 In the reader:
-- `t` — translate article to the UI language
+- `Ctrl+t` — translate article to the UI language
 - `Ctrl+s` — summarize in the article's language (3-5 key bullet points)
 
 ### Provider Examples
@@ -377,12 +378,14 @@ Categories: Tech News, Programming, AI/ML, Security, Linux/Open Source, Science,
 
 ## Themes
 
-Switch via Settings (`s`) > General > Theme:
+Switch with `t` or via Settings (`s`) > General > Theme:
 
 - **dark** — Tokyo Night (default)
 - **light** — Catppuccin Latte
+- **sepia** — warm paper-like light theme
 - **catppuccin** — Catppuccin Mocha
 - **rose-pine** — Rose Pine
+- **gruvbox** — Gruvbox Dark
 
 Light theme works correctly on dark terminals and vice versa.
 

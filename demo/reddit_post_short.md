@@ -10,7 +10,7 @@ Built **rdr** because I wanted an RSS reader that lives in the terminal and work
 - Vim navigation, query language (`title:rust unread newer:1w`), smart folders
 - Inline images via Kitty Graphics Protocol
 - Optional AI translate / summarize (Claude Code, pi, opencode, Ollama, any OpenAI-compatible API)
-- 4 themes, OPML import/export, OSC 52 clipboard
+- 6 themes, OPML import/export, OSC 52 clipboard
 
 Install: `brew tap iRootPro/tap && brew install rdr` or `go install github.com/iRootPro/rdr@latest`
 

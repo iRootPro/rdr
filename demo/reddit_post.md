@@ -15,9 +15,9 @@ Hey everyone! I've been working on **rdr** — a TUI RSS/Atom reader built with 
 - **Full article rendering** — fetches the full article via readability and renders it with glamour (markdown in your terminal)
 - **Smart folders** — saved queries like `unread newer:1w title:rust`
 - **Query language** — search with `title:`, `feed:`, `unread`, `starred`, `today`, `newer:1w`, negation with `~`
-- **AI translation & summarization** — works with Claude Code, pi, opencode, Apple Intelligence (apfel), Ollama, or any OpenAI-compatible API. Press `t` to translate, `Ctrl+s` to summarize in the article's language
+- **AI translation & summarization** — works with Claude Code, pi, opencode, Apple Intelligence (apfel), Ollama, or any OpenAI-compatible API. Press `Ctrl+t` to translate, `Ctrl+s` to summarize in the article's language
 - **Feed catalog** — built-in curated directory with 37 feeds in 9 categories. Opens on first launch as onboarding
-- **4 themes** — Dark (Tokyo Night), Light (Catppuccin Latte), Catppuccin Mocha, Rose Pine. Light theme works correctly on dark terminals and vice versa
+- **6 themes** — Dark (Tokyo Night), Light (Catppuccin Latte), Sepia, Catppuccin Mocha, Rose Pine, Gruvbox. Light theme works correctly on dark terminals and vice versa
 - **Nerd Font icons** — source-specific icons (GitHub, HN, Habr, Reddit, Go, etc.), powerline status bar
 - **Russian keyboard layout** — all keybindings work without switching to English
 - **OPML import/export**

@@ -237,6 +237,7 @@ type HelpStrings struct {
 	DescGlobalSync      string
 	DescGlobalSettings  string
 	DescGlobalZen       string
+	DescGlobalTheme     string
 	DescGlobalHelp      string
 	DescGlobalQuit      string
 	DescGlobalAddURL    string
@@ -632,6 +633,7 @@ var en = Strings{
 		DescGlobalSync:      "sync all feeds",
 		DescGlobalSettings:  "open settings",
 		DescGlobalZen:       "toggle zen mode",
+		DescGlobalTheme:     "cycle theme",
 		DescGlobalHelp:      "toggle this help",
 		DescGlobalQuit:      "quit",
 		DescGlobalAddURL:    "save URL to Library",
@@ -1054,6 +1056,7 @@ var ru = Strings{
 		DescGlobalSync:      "синхронизировать все ленты",
 		DescGlobalSettings:  "открыть настройки",
 		DescGlobalZen:       "переключить zen-режим",
+		DescGlobalTheme:     "переключить тему",
 		DescGlobalHelp:      "переключить справку",
 		DescGlobalQuit:      "выход",
 		DescGlobalAddURL:    "сохранить URL в библиотеку",

@@ -115,18 +115,11 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			lastBucket = bucket
 		}
 		a := articles[i]
-		titleStyle := unreadStyle
-		if a.ReadAt != nil {
-			titleStyle = readStyle
-		}
 		prefix := "  "
 		if i == selected {
 			prefix = "› "
 			if active {
 				prefix = "▌ "
-				titleStyle = itemSelected
-			} else {
-				titleStyle = itemSelectedInactive
 			}
 		}
 		rowBG := colorBG
@@ -134,7 +127,23 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		if (i == selected && active) || inVisual {
 			rowBG = colorAltBG
 		}
-		rowTitleStyle := titleStyle.Background(rowBG)
+
+		// Article rows are dense and usually mostly unread. Rendering every
+		// unread headline in bold makes the pane feel heavy and tiring to scan,
+		// especially with large Nerd Font weights. Use color/contrast instead:
+		// unread = normal text, read = muted, selected = accent on row bg.
+		titleFG := colorListText
+		if a.ReadAt != nil {
+			titleFG = colorMuted
+		}
+		if i == selected {
+			if active {
+				titleFG = colorSecondary
+			} else {
+				titleFG = colorMuted
+			}
+		}
+		rowTitleStyle := lipgloss.NewStyle().Foreground(titleFG).Background(rowBG)
 		whenFG := colorMuted
 		if i == selected && active {
 			whenFG = colorOrange
@@ -226,9 +235,12 @@ func sourceChip(name string, cellW int, selected bool, rowBG lipgloss.Color) str
 		labelW = 1
 	}
 	label := truncate(name, labelW)
-	style := lipgloss.NewStyle().Foreground(colorTeal).Background(rowBG).Bold(true)
+	// Keep the repeated source column quiet: in cross-feed views it appears
+	// on every row and bright teal competes with the headlines. Highlight it
+	// only on the active row.
+	style := lipgloss.NewStyle().Foreground(colorMuted).Background(rowBG)
 	if selected {
-		style = style.Foreground(colorAccent)
+		style = style.Foreground(colorTeal)
 	}
 	return lipgloss.NewStyle().Background(rowBG).Render(" ") + style.Render(label)
 }

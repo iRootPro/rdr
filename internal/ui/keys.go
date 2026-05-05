@@ -201,6 +201,7 @@ func fullHelpFor(f focus, tr *i18n.Strings, inLibrary bool) []helpSection {
 			{"R", h.DescGlobalSync},
 			{"s", h.DescGlobalSettings},
 			{"z", h.DescGlobalZen},
+			{"t", h.DescGlobalTheme},
 			{"B", h.DescGlobalAddURL},
 			{"?", h.DescGlobalHelp},
 			{"q", h.DescGlobalQuit},

@@ -16,11 +16,12 @@ type Theme struct {
 	Name  string
 	Light bool // true for light palettes — drives glamour style etc.
 
-	BG     lipgloss.Color // primary pane background
-	AltBG  lipgloss.Color // selection / alternate row
-	Border lipgloss.Color // muted border / separator
-	Muted  lipgloss.Color // de-emphasized text (metadata, hints)
-	Text   lipgloss.Color // default foreground
+	BG       lipgloss.Color // primary pane background
+	AltBG    lipgloss.Color // selection / alternate row
+	Border   lipgloss.Color // muted border / separator
+	Muted    lipgloss.Color // de-emphasized text (metadata, hints)
+	Text     lipgloss.Color // default foreground
+	ListText lipgloss.Color // dense list foreground, softer than Text
 
 	Accent    lipgloss.Color // pane titles, active border, chrome
 	Secondary lipgloss.Color // selected row, secondary accent
@@ -41,6 +42,7 @@ var themeDark = Theme{
 	Border:    lipgloss.Color("#3b4261"),
 	Muted:     lipgloss.Color("#565f89"),
 	Text:      lipgloss.Color("#c0caf5"),
+	ListText:  lipgloss.Color("#a9b1d6"),
 	Accent:    lipgloss.Color("#7aa2f7"),
 	Secondary: lipgloss.Color("#bb9af7"),
 	Green:     lipgloss.Color("#9ece6a"),
@@ -60,6 +62,7 @@ var themeLight = Theme{
 	Border:    lipgloss.Color("#9ca0b0"),
 	Muted:     lipgloss.Color("#7c7f93"),
 	Text:      lipgloss.Color("#4c4f69"),
+	ListText:  lipgloss.Color("#5c5f77"),
 	Accent:    lipgloss.Color("#1e66f5"),
 	Secondary: lipgloss.Color("#7533d4"),
 	Green:     lipgloss.Color("#2e8b1e"),
@@ -67,6 +70,26 @@ var themeLight = Theme{
 	Red:       lipgloss.Color("#c4102b"),
 	Yellow:    lipgloss.Color("#a06208"),
 	Teal:      lipgloss.Color("#0e7a80"),
+}
+
+// themeSepia is a warm paper-like light palette: bright enough for daytime,
+// but far from pure white to reduce glare during long reading sessions.
+var themeSepia = Theme{
+	Name:      "sepia",
+	Light:     true,
+	BG:        lipgloss.Color("#efe3c6"),
+	AltBG:     lipgloss.Color("#e3d3ad"),
+	Border:    lipgloss.Color("#c9b88f"),
+	Muted:     lipgloss.Color("#8a7a61"),
+	Text:      lipgloss.Color("#3f3528"),
+	ListText:  lipgloss.Color("#574936"),
+	Accent:    lipgloss.Color("#8f5e15"),
+	Secondary: lipgloss.Color("#9a5b24"),
+	Green:     lipgloss.Color("#5f7a32"),
+	Orange:    lipgloss.Color("#ad651f"),
+	Red:       lipgloss.Color("#9a3d2e"),
+	Yellow:    lipgloss.Color("#8f6a18"),
+	Teal:      lipgloss.Color("#4f7f70"),
 }
 
 // themeCatppuccinMocha — the canonical dark Catppuccin palette.
@@ -77,6 +100,7 @@ var themeCatppuccinMocha = Theme{
 	Border:    lipgloss.Color("#45475a"),
 	Muted:     lipgloss.Color("#6c7086"),
 	Text:      lipgloss.Color("#cdd6f4"),
+	ListText:  lipgloss.Color("#bac2de"),
 	Accent:    lipgloss.Color("#89b4fa"),
 	Secondary: lipgloss.Color("#cba6f7"),
 	Green:     lipgloss.Color("#a6e3a1"),
@@ -96,6 +120,7 @@ var themeRosePine = Theme{
 	Border:    lipgloss.Color("#26233a"),
 	Muted:     lipgloss.Color("#6e6a86"),
 	Text:      lipgloss.Color("#e0def4"),
+	ListText:  lipgloss.Color("#c9c3dd"),
 	Accent:    lipgloss.Color("#ebbcba"),
 	Secondary: lipgloss.Color("#c4a7e7"),
 	Green:     lipgloss.Color("#9ccfd8"),
@@ -105,9 +130,28 @@ var themeRosePine = Theme{
 	Teal:      lipgloss.Color("#9ccfd8"),
 }
 
+// themeGruvbox — Gruvbox dark, tuned to keep the reader warm and readable
+// while preserving the palette's yellow/orange accents.
+var themeGruvbox = Theme{
+	Name:      "gruvbox",
+	BG:        lipgloss.Color("#282828"),
+	AltBG:     lipgloss.Color("#32302f"),
+	Border:    lipgloss.Color("#504945"),
+	Muted:     lipgloss.Color("#7c6f64"),
+	Text:      lipgloss.Color("#d4be98"),
+	ListText:  lipgloss.Color("#c7b995"),
+	Accent:    lipgloss.Color("#d8a657"),
+	Secondary: lipgloss.Color("#e78a4e"),
+	Green:     lipgloss.Color("#a9b665"),
+	Orange:    lipgloss.Color("#e78a4e"),
+	Red:       lipgloss.Color("#ea6962"),
+	Yellow:    lipgloss.Color("#d8a657"),
+	Teal:      lipgloss.Color("#89b482"),
+}
+
 // availableThemes is the cycle order exposed to the user through the
 // Settings → General → Theme row. Index 0 is the default.
-var availableThemes = []Theme{themeDark, themeLight, themeCatppuccinMocha, themeRosePine}
+var availableThemes = []Theme{themeDark, themeLight, themeSepia, themeCatppuccinMocha, themeRosePine, themeGruvbox}
 
 // Current color slots. Initial values match themeDark so the first
 // paint works even before ApplyTheme is called. applyTheme reassigns
@@ -118,6 +162,7 @@ var (
 	colorBorder    = themeDark.Border
 	colorMuted     = themeDark.Muted
 	colorText      = themeDark.Text
+	colorListText  = themeDark.ListText
 	colorAccent    = themeDark.Accent
 	colorSecondary = themeDark.Secondary
 	colorGreen     = themeDark.Green
@@ -179,6 +224,7 @@ func applyTheme(t Theme) {
 	colorBorder = t.Border
 	colorMuted = t.Muted
 	colorText = t.Text
+	colorListText = t.ListText
 	colorAccent = t.Accent
 	colorSecondary = t.Secondary
 	colorGreen = t.Green

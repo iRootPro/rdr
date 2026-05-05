@@ -529,6 +529,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case keyIs(msg, "t"):
+			return m.cycleTheme()
+		case msg.String() == "ctrl+t":
 			if m.focus != focusReader || m.readerArt == nil || m.fetching {
 				return m, nil
 			}
@@ -1216,6 +1218,8 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpPrev = m.focus
 		m.focus = focusHelp
 		return m, nil
+	case keyIs(msg, "t"):
+		return m.cycleTheme()
 	}
 
 	switch m.settingsSection {
@@ -1535,24 +1539,7 @@ func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
 		return m, m.showToast(label)
 
 	case 4: // Theme
-		cur := 0
-		for i, t := range availableThemes {
-			if t.Name == m.themeName {
-				cur = i
-				break
-			}
-		}
-		next := availableThemes[(cur+1)%len(availableThemes)]
-		m.themeName = next.Name
-		applyTheme(next)
-		applyHelpModelStyles(&m.help)
-		m.settingsInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
-		m.searchInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
-		m.commandInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
-		if m.db != nil {
-			_ = m.db.SetTheme(next.Name)
-		}
-		return m, m.showToast(fmt.Sprintf(m.tr.Toasts.ThemeChangedFmt, next.Name))
+		return m.cycleTheme()
 	case 5: // Refresh interval
 		options := []int{0, 5, 15, 30, 60}
 		cur := 0
@@ -1607,6 +1594,27 @@ func (m Model) cycleGeneralRow() (tea.Model, tea.Cmd) {
 		return m, m.showToast(label)
 	}
 	return m, nil
+}
+
+func (m Model) cycleTheme() (tea.Model, tea.Cmd) {
+	cur := 0
+	for i, t := range availableThemes {
+		if t.Name == m.themeName {
+			cur = i
+			break
+		}
+	}
+	next := availableThemes[(cur+1)%len(availableThemes)]
+	m.themeName = next.Name
+	applyTheme(next)
+	applyHelpModelStyles(&m.help)
+	m.settingsInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+	m.searchInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+	m.commandInput.PromptStyle = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBG)
+	if m.db != nil {
+		_ = m.db.SetTheme(next.Name)
+	}
+	return m, m.showToast(fmt.Sprintf(m.tr.Toasts.ThemeChangedFmt, next.Name))
 }
 
 // applyHelpModelStyles copies the current palette into the bubbles

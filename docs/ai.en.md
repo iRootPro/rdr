@@ -13,7 +13,7 @@
 
 ## Behavior
 
-- `t` translates the article to the UI language.
+- `Ctrl+t` translates the article to the UI language.
 - `Ctrl+s` summarizes the article in the article's own language.
   - Russian article → Russian summary.
   - English article → English summary.
