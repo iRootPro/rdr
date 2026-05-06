@@ -79,6 +79,8 @@ const (
 	smList settingsMode = iota
 	smAddName
 	smAddURL
+	smAddResolving
+	smAddCategoryPicker
 	smRename
 	smCategory
 	smCategoryPicker
@@ -88,6 +90,7 @@ const (
 	smSmartFolderAddQuery
 	smSmartFolderEditName
 	smSmartFolderEditQuery
+	smFolderAdd
 	smFolderRename
 	smAfterSyncAdd
 	smAfterSyncEdit
@@ -168,12 +171,13 @@ type Model struct {
 	tr   *i18n.Strings
 	lang i18n.Lang
 
-	feeds        []db.Feed
-	smartFolders []db.SmartFolder
-	articles     []db.Article
-	selEntry     int
-	selArt       int
-	focus        focus
+	feeds          []db.Feed
+	smartFolders   []db.SmartFolder
+	regularFolders []string
+	articles       []db.Article
+	selEntry       int
+	selArt         int
+	focus          focus
 
 	// allArticles is a cached cross-feed snapshot used to compute smart
 	// folder match counts without hitting the DB on every keystroke.
@@ -210,6 +214,7 @@ type Model struct {
 	settingsCategoryPickerSel int
 	settingsInput             textinput.Model
 	pendingName               string
+	pendingURL                string
 
 	searchInput   textinput.Model
 	searchAll     []db.SearchItem
@@ -294,6 +299,7 @@ type Model struct {
 func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, refreshIntervalMinutes int, home string, lang i18n.Lang, showImages bool, sortField string, sortReverse bool, showPreview bool, themeName string) Model {
 	rlog.Init(home)
 	smartFolders, _ := database.ListSmartFolders()
+	regularFolders, _ := database.ListFolders()
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle()
@@ -339,6 +345,7 @@ func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, ref
 		feedErrors:        map[int64]error{},
 		collapsedCats:     readCollapsedCats(home),
 		smartFolders:      smartFolders,
+		regularFolders:    regularFolders,
 		afterSyncCommands: afterSyncCommands,
 		refreshInterval:   time.Duration(refreshIntervalMinutes) * time.Minute,
 		aiConfig:          loadAIConfig(database),
@@ -361,6 +368,7 @@ func New(database *db.DB, fetcher *feed.Fetcher, afterSyncCommands []string, ref
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		loadFeedsCmd(m.db),
+		loadFoldersCmd(m.db),
 		loadAllArticlesCmd(m.db),
 		fetchAllCmd(m.fetcher),
 		m.spin.Tick,
@@ -792,6 +800,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case foldersLoadedMsg:
+		m.regularFolders = msg.folders
+		m.err = nil
+		return m, nil
+
+	case youtubeResolvedMsg:
+		if m.settingsMode != smAddResolving || m.pendingURL == "" {
+			return m, nil
+		}
+		if !m.fetching {
+			m.status = m.tr.Status.Ready
+		}
+		if msg.err != nil {
+			m.err = msg.err
+			m.settingsMode = smAddURL
+			m.settingsInput.SetValue(m.pendingURL)
+			m.settingsInput.Focus()
+			return m, textinput.Blink
+		}
+		if msg.url != "" {
+			m.pendingURL = msg.url
+		}
+		// Keep the user-entered feed name. YouTube's RSS <link> title is
+		// often just "RSS", so resolver metadata must not overwrite it.
+		m.settingsMode = smAddCategoryPicker
+		m.settingsCategoryPickerSel = initialAddCategoryPickerSel(&m)
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		m.err = nil
+		return m, nil
+
 	case articlesLoadedMsg:
 		m.err = nil
 		e, ok := m.currentEntry()
@@ -1183,8 +1222,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.settingsMode == smCategoryPicker {
+	if m.settingsMode == smCategoryPicker || m.settingsMode == smAddCategoryPicker {
 		return m.updateSettingsCategoryPicker(msg)
+	}
+	if m.settingsMode == smAddResolving {
+		if key.Matches(msg, m.keys.Back) {
+			m.pendingName = ""
+			m.pendingURL = ""
+			m.settingsMode = smList
+			return m, nil
+		}
+		return m, nil
 	}
 	if m.settingsMode == smAIProviderPicker {
 		return m.updateSettingsAIProviderPicker(msg)
@@ -1192,6 +1240,10 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.settingsMode != smList {
 		switch {
 		case key.Matches(msg, m.keys.Back):
+			if m.settingsMode == smAddName || m.settingsMode == smAddURL || (m.settingsMode == smCategory && m.pendingURL != "") {
+				m.pendingName = ""
+				m.pendingURL = ""
+			}
 			m.settingsMode = smList
 			m.settingsInput.Blur()
 			m.settingsInput.SetValue("")
@@ -1238,24 +1290,55 @@ func (m Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+func settingsFeedDisplayIndices(feeds []db.Feed) []int {
+	rows := groupedSettingsFeeds(feeds)
+	idxs := make([]int, 0, len(feeds))
+	for _, r := range rows {
+		if r.feedIdx >= 0 {
+			idxs = append(idxs, r.feedIdx)
+		}
+	}
+	return idxs
+}
+
+func moveSettingsFeedSelection(displayIdxs []int, current, delta int) int {
+	if len(displayIdxs) == 0 {
+		return current
+	}
+	pos := 0
+	for i, idx := range displayIdxs {
+		if idx == current {
+			pos = i
+			break
+		}
+	}
+	pos += delta
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(displayIdxs) {
+		pos = len(displayIdxs) - 1
+	}
+	return displayIdxs[pos]
+}
+
 func (m Model) updateSettingsFeeds(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	displayIdxs := settingsFeedDisplayIndices(m.feeds)
 	switch {
 	case key.Matches(msg, m.keys.Down):
-		if m.settingsSel < len(m.feeds)-1 {
-			m.settingsSel++
-		}
+		m.settingsSel = moveSettingsFeedSelection(displayIdxs, m.settingsSel, 1)
 		return m, nil
 	case key.Matches(msg, m.keys.Up):
-		if m.settingsSel > 0 {
-			m.settingsSel--
-		}
+		m.settingsSel = moveSettingsFeedSelection(displayIdxs, m.settingsSel, -1)
 		return m, nil
 	case key.Matches(msg, m.keys.Top):
-		m.settingsSel = 0
+		if len(displayIdxs) > 0 {
+			m.settingsSel = displayIdxs[0]
+		}
 		return m, nil
 	case key.Matches(msg, m.keys.Bottom):
-		if len(m.feeds) > 0 {
-			m.settingsSel = len(m.feeds) - 1
+		if len(displayIdxs) > 0 {
+			m.settingsSel = displayIdxs[len(displayIdxs)-1]
 		}
 		return m, nil
 	case keyIs(msg, "a"):
@@ -1307,10 +1390,10 @@ func (m Model) updateSettingsFeeds(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateSettingsFolders handles keystrokes in the Folders top-level
-// section. Regular folders are a derived view over feed.Category; this
-// handler operates on uniqueCategories(m.feeds) and uses its own cursor.
+// section. Regular folders are persisted independently and may be empty;
+// feed.Category stores assignment from feed to folder.
 func (m Model) updateSettingsFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	cats := uniqueCategories(m.feeds)
+	cats := allRegularFolders(m.feeds, m.regularFolders)
 	switch {
 	case key.Matches(msg, m.keys.Down):
 		if m.settingsFolderSel < len(cats)-1 {
@@ -1330,6 +1413,11 @@ func (m Model) updateSettingsFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsFolderSel = len(cats) - 1
 		}
 		return m, nil
+	case keyIs(msg, "a"):
+		m.settingsMode = smFolderAdd
+		m.settingsInput.SetValue("")
+		m.settingsInput.Focus()
+		return m, textinput.Blink
 	case keyIs(msg, "e"):
 		if len(cats) == 0 {
 			return m, nil
@@ -1348,7 +1436,7 @@ func (m Model) updateSettingsFolders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.settingsFolderSel = 0
-		return m, loadFeedsCmd(m.db)
+		return m, tea.Batch(loadFeedsCmd(m.db), loadFoldersCmd(m.db))
 	}
 	return m, nil
 }
@@ -1361,6 +1449,10 @@ func (m Model) updateSettingsCategoryPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 	rows := buildCategoryPickerRows(&m)
 	switch {
 	case key.Matches(msg, m.keys.Back):
+		if m.settingsMode == smAddCategoryPicker {
+			m.pendingName = ""
+			m.pendingURL = ""
+		}
 		m.settingsMode = smList
 		return m, nil
 	case key.Matches(msg, m.keys.Down):
@@ -1385,13 +1477,16 @@ func (m Model) updateSettingsCategoryPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 		}
 		row := rows[m.settingsCategoryPickerSel]
 		if row.IsNew {
-			// Route into the existing smCategory text-input path so
-			// settingsSubmit applies the new value to the feed exactly
-			// the same way as the old direct-prompt flow did.
+			// Route into the existing smCategory text-input path. During
+			// add-feed flow pendingURL is set, so submit creates the feed;
+			// otherwise it applies to the selected existing feed.
 			m.settingsMode = smCategory
 			m.settingsInput.SetValue("")
 			m.settingsInput.Focus()
 			return m, textinput.Blink
+		}
+		if m.settingsMode == smAddCategoryPicker {
+			return m.savePendingFeed(row.Value)
 		}
 		if len(m.feeds) == 0 || m.settingsSel >= len(m.feeds) {
 			return m, nil
@@ -1402,7 +1497,7 @@ func (m Model) updateSettingsCategoryPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 			return m, nil
 		}
 		m.settingsMode = smList
-		return m, loadFeedsCmd(m.db)
+		return m, tea.Batch(loadFeedsCmd(m.db), loadFoldersCmd(m.db))
 	}
 	return m, nil
 }
@@ -1424,12 +1519,32 @@ func initialCategoryPickerSel(m *Model) int {
 	return 0
 }
 
-// uniqueCategories returns a sorted list of non-empty categories present
-// in the feed list. "Other" (empty string) is excluded because it is the
-// fallback bucket and cannot be meaningfully renamed or deleted.
-func uniqueCategories(feeds []db.Feed) []string {
+func initialAddCategoryPickerSel(m *Model) int {
+	if feed.IsYouTubeURL(m.pendingURL) {
+		rows := buildCategoryPickerRows(m)
+		for i, r := range rows {
+			if !r.IsNew && strings.EqualFold(r.Value, "YouTube") {
+				return i
+			}
+		}
+	}
+	return 0
+}
+
+// allRegularFolders returns a sorted list of non-empty regular folders,
+// combining explicit folders with categories present on feeds. "Other"
+// (empty string) is excluded because it is the fallback bucket and cannot
+// be meaningfully renamed or deleted.
+func allRegularFolders(feeds []db.Feed, folders []string) []string {
 	seen := map[string]bool{}
 	var out []string
+	for _, f := range folders {
+		if f == "" || seen[f] {
+			continue
+		}
+		seen[f] = true
+		out = append(out, f)
+	}
 	for _, f := range feeds {
 		if f.Category == "" || seen[f.Category] {
 			continue
@@ -1731,6 +1846,23 @@ func (m Model) updateSettingsAfterSync(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) savePendingFeed(category string) (tea.Model, tea.Cmd) {
+	if m.pendingName == "" || m.pendingURL == "" {
+		m.settingsMode = smList
+		return m, nil
+	}
+	if _, err := m.db.UpsertFeed(m.pendingName, m.pendingURL, category); err != nil {
+		m.err = err
+		return m, nil
+	}
+	m.pendingName = ""
+	m.pendingURL = ""
+	m.settingsMode = smList
+	m.settingsInput.Blur()
+	m.settingsInput.SetValue("")
+	return m, tea.Batch(loadFeedsCmd(m.db), loadFoldersCmd(m.db))
+}
+
 func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 	value := strings.TrimSpace(m.settingsInput.Value())
 	switch m.settingsMode {
@@ -1746,15 +1878,17 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		if value == "" {
 			return m, nil
 		}
-		if _, err := m.db.UpsertFeed(m.pendingName, value, ""); err != nil {
-			m.err = err
-			return m, nil
-		}
-		m.pendingName = ""
-		m.settingsMode = smList
+		m.pendingURL = value
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
-		return m, loadFeedsCmd(m.db)
+		if feed.IsYouTubeURL(value) {
+			m.settingsMode = smAddResolving
+			m.status = "resolving YouTube…"
+			return m, resolveYouTubeCmd(m.fetcher, value)
+		}
+		m.settingsMode = smAddCategoryPicker
+		m.settingsCategoryPickerSel = initialAddCategoryPickerSel(&m)
+		return m, nil
 	case smRename:
 		if value == "" || len(m.feeds) == 0 {
 			return m, nil
@@ -1769,6 +1903,9 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsInput.SetValue("")
 		return m, loadFeedsCmd(m.db)
 	case smCategory:
+		if m.pendingURL != "" {
+			return m.savePendingFeed(value)
+		}
 		if len(m.feeds) == 0 {
 			return m, nil
 		}
@@ -1780,7 +1917,7 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsMode = smList
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
-		return m, loadFeedsCmd(m.db)
+		return m, tea.Batch(loadFeedsCmd(m.db), loadFoldersCmd(m.db))
 	case smImport:
 		if value == "" {
 			return m, nil
@@ -1876,8 +2013,21 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsInput.SetValue("")
 		return m, loadSmartFoldersCmd(m.db)
 
+	case smFolderAdd:
+		if value == "" {
+			return m, nil
+		}
+		if err := m.db.CreateFolder(value); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.settingsMode = smList
+		m.settingsInput.Blur()
+		m.settingsInput.SetValue("")
+		return m, loadFoldersCmd(m.db)
+
 	case smFolderRename:
-		cats := uniqueCategories(m.feeds)
+		cats := allRegularFolders(m.feeds, m.regularFolders)
 		if m.settingsFolderSel >= len(cats) {
 			return m, nil
 		}
@@ -1890,7 +2040,7 @@ func (m Model) settingsSubmit() (tea.Model, tea.Cmd) {
 		m.settingsInput.Blur()
 		m.settingsInput.SetValue("")
 		m.settingsFolderSel = 0
-		return m, loadFeedsCmd(m.db)
+		return m, tea.Batch(loadFeedsCmd(m.db), loadFoldersCmd(m.db))
 
 	case smAfterSyncAdd:
 		if value == "" {
@@ -2851,30 +3001,28 @@ func (m Model) entries() []feedEntry {
 		})
 	}
 
-	// Bucket feeds by category preserving first-seen order.
+	// Bucket feeds by category. Explicit folders are included even when
+	// empty, then the empty category is pinned to the bottom as "Other".
 	type group struct {
 		feeds []db.Feed
 	}
-	var order []string
 	groups := make(map[string]*group)
 	for _, f := range m.feeds {
 		if _, ok := groups[f.Category]; !ok {
 			groups[f.Category] = &group{}
-			order = append(order, f.Category)
 		}
 		groups[f.Category].feeds = append(groups[f.Category].feeds, f)
 	}
-	// Pin the empty category to the bottom as "Other".
-	for i, k := range order {
-		if k == "" {
-			order = append(order[:i], order[i+1:]...)
-			order = append(order, "")
-			break
-		}
+	order := allRegularFolders(m.feeds, m.regularFolders)
+	if _, ok := groups[""]; ok {
+		order = append(order, "")
 	}
 
 	for _, key := range order {
 		g := groups[key]
+		if g == nil {
+			g = &group{}
+		}
 		displayName := key
 		if displayName == "" {
 			displayName = m.tr.Feeds.OtherCategory
@@ -3012,6 +3160,29 @@ func loadFeedsCmd(d *db.DB) tea.Cmd {
 			return errMsg{err}
 		}
 		return feedsLoadedMsg{feeds: feeds}
+	}
+}
+
+func loadFoldersCmd(d *db.DB) tea.Cmd {
+	return func() tea.Msg {
+		folders, err := d.ListFolders()
+		if err != nil {
+			return errMsg{err}
+		}
+		return foldersLoadedMsg{folders: folders}
+	}
+}
+
+func resolveYouTubeCmd(f *feed.Fetcher, raw string) tea.Cmd {
+	return func() tea.Msg {
+		resolved, ok, err := f.ResolveYouTube(context.Background(), raw)
+		if err != nil {
+			return youtubeResolvedMsg{err: err}
+		}
+		if !ok {
+			return youtubeResolvedMsg{url: raw}
+		}
+		return youtubeResolvedMsg{name: resolved.Name, url: resolved.URL}
 	}
 }
 

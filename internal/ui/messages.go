@@ -24,6 +24,16 @@ type feedsLoadedMsg struct {
 	feeds []db.Feed
 }
 
+type foldersLoadedMsg struct {
+	folders []string
+}
+
+type youtubeResolvedMsg struct {
+	name string
+	url  string
+	err  error
+}
+
 type articlesLoadedMsg struct {
 	feedID   int64
 	articles []db.Article

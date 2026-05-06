@@ -205,7 +205,16 @@ func renderFeedsSection(b *strings.Builder, m *Model, input string) {
 		b.WriteString(tr.Settings.NewFeedURL + "\n\n")
 		b.WriteString(input)
 		b.WriteString("\n\n")
-		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterContinue))
+		return
+	case smAddResolving:
+		b.WriteString(tr.Settings.ResolvingYouTube + "\n\n")
+		b.WriteString(settingsURL.Render(m.pendingURL))
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Status.Fetching + " · esc cancel"))
+		return
+	case smAddCategoryPicker:
+		renderCategoryPicker(b, m)
 		return
 	case smRename:
 		b.WriteString(tr.Settings.RenameFeed + "\n\n")
@@ -389,7 +398,7 @@ func buildCategoryPickerRows(m *Model) []categoryPickerRow {
 	rows := []categoryPickerRow{
 		{Name: m.tr.Settings.NoFolderOption, Value: ""},
 	}
-	for _, c := range uniqueCategories(m.feeds) {
+	for _, c := range allRegularFolders(m.feeds, m.regularFolders) {
 		rows = append(rows, categoryPickerRow{Name: c, Value: c})
 	}
 	rows = append(rows, categoryPickerRow{
@@ -403,7 +412,7 @@ func renderCategoryPicker(b *strings.Builder, m *Model) {
 	tr := m.tr
 	rows := buildCategoryPickerRows(m)
 	currentFolder := ""
-	if m.settingsSel < len(m.feeds) {
+	if m.settingsMode != smAddCategoryPicker && m.settingsSel < len(m.feeds) {
 		currentFolder = m.feeds[m.settingsSel].Category
 	}
 
@@ -434,12 +443,18 @@ func renderCategoryPicker(b *strings.Builder, m *Model) {
 	b.WriteString(settingsKeyHint.Render(tr.Settings.CategoryPickerHint))
 }
 
-// renderFoldersSection draws the list of unique non-empty feed folders
-// (= the Category column on feeds) with a per-folder feed count. The
-// folder list is purely derived — there is no separate "folders" table.
-// Supports smFolderRename prompt with "empty = Other" semantics.
+// renderFoldersSection draws regular folders with a per-folder feed count.
+// Folders are persisted independently so they may be empty; feed.Category
+// stores the assignment from feed to folder.
 func renderFoldersSection(b *strings.Builder, m *Model, input string) {
 	tr := m.tr
+	if m.settingsMode == smFolderAdd {
+		b.WriteString(tr.Settings.FolderAdd + "\n\n")
+		b.WriteString(input)
+		b.WriteString("\n\n")
+		b.WriteString(settingsKeyHint.Render(tr.Settings.EnterSave))
+		return
+	}
 	if m.settingsMode == smFolderRename {
 		b.WriteString(tr.Settings.FolderRename + "\n\n")
 		b.WriteString(input)
@@ -448,7 +463,7 @@ func renderFoldersSection(b *strings.Builder, m *Model, input string) {
 		return
 	}
 
-	cats := uniqueCategories(m.feeds)
+	cats := allRegularFolders(m.feeds, m.regularFolders)
 	if len(cats) == 0 {
 		b.WriteString(readStyle.Render(tr.Settings.NoFolders))
 	} else {

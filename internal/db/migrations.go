@@ -84,4 +84,19 @@ var migrations = []string{
 	INSERT OR IGNORE INTO feeds (name, url, position, category)
 	VALUES ('Library', 'internal://library', -1, '');
 	`,
+	// 008: explicit regular folders. Feed.category remains the assignment
+	// column; this table lets the TUI create empty folders before any feed
+	// is moved into them.
+	`
+	CREATE TABLE folders (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		name        TEXT NOT NULL UNIQUE,
+		position    INTEGER NOT NULL DEFAULT 0,
+		created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX idx_folders_position ON folders(position, id);
+	INSERT OR IGNORE INTO folders (name, position)
+	SELECT category, ROW_NUMBER() OVER (ORDER BY category) - 1
+	FROM (SELECT DISTINCT category FROM feeds WHERE category != '');
+	`,
 }

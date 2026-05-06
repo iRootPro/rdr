@@ -21,7 +21,8 @@ Vim-style navigation, full article reading, smart folders, query language search
 - Split-pane interface: feeds on the left, articles on the right
 - Full article reading in the terminal (readability + glamour)
 - Inline images in the reader via Kitty Graphics Protocol
-- Feed categories with collapse/expand
+- Feed folders with empty-folder creation, rename/delete, and collapse/expand
+- Fast YouTube channel adding: paste a channel/handle/video URL and rdr resolves the RSS feed
 - Smart folders (saved search queries)
 - Search with query language (`title:rust unread newer:1w`)
 - Read Later queue — separate from Starred, for articles to read later (`b`)
@@ -231,14 +232,16 @@ Tabs: Feeds · General · Folders · Smart Folders · Auto-commands · AI
 | Key | Action |
 |-----|--------|
 | `tab` | Switch tab |
-| `a` | Add feed / folder / auto-command |
+| `a` | Add feed / folder / smart folder / auto-command |
 | `d` | Delete |
 | `e` | Rename / edit |
-| `c` | Assign folder to feed |
+| `c` | Assign folder to feed; `+ New folder…` also creates a new folder |
 | `i` | Import OPML |
 | `E` | Export OPML |
 | `enter` / `space` | Toggle value (General tab) |
 | `esc` | Close settings |
+
+When adding a feed, you can paste a YouTube channel/handle/video URL: rdr shows a channel-resolving screen, resolves the channel ID, and stores the `youtube.com/feeds/videos.xml` RSS URL. If a `YouTube` folder exists, it is selected by default.
 
 **General** tab: language, images, sort, preview, theme, auto-refresh (0/5/15/30/60 min), read-article retention (0/30/90/180/365 days; 0 = keep forever).
 

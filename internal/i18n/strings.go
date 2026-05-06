@@ -77,6 +77,7 @@ type SettingsStrings struct {
 
 	NewFeedName      string
 	NewFeedURL       string
+	ResolvingYouTube string
 	RenameFeed       string
 	CategoryPrompt   string
 	ImportPrompt     string
@@ -90,6 +91,7 @@ type SettingsStrings struct {
 	// Regular folders (= categories on feeds).
 	NoFolders    string
 	FoldersHint  string
+	FolderAdd    string
 	FolderRename string
 
 	// Category picker (opened via 'c' on a feed).
@@ -489,6 +491,7 @@ var en = Strings{
 
 		NewFeedName:      "New feed name:",
 		NewFeedURL:       "New feed URL:",
+		ResolvingYouTube: "Resolving YouTube channel…",
 		RenameFeed:       "Rename feed:",
 		CategoryPrompt:   "Category:",
 		ImportPrompt:     "Import OPML from:",
@@ -499,8 +502,9 @@ var en = Strings{
 		NoFeeds:          "(no feeds) — press a to add",
 		FeedsHint:        "a add · d del · e rename · c cat · i import · E export · tab section · esc close",
 
-		NoFolders:    "(no folders)",
-		FoldersHint:  "e rename · d delete · tab section · esc close",
+		NoFolders:    "(no folders) — press a to add",
+		FoldersHint:  "a add · e rename · d delete · tab section · esc close",
+		FolderAdd:    "New folder name:",
 		FolderRename: "Rename folder:",
 
 		NoFolderOption:      "— (no folder)",
@@ -912,6 +916,7 @@ var ru = Strings{
 
 		NewFeedName:      "Название ленты:",
 		NewFeedURL:       "URL ленты:",
+		ResolvingYouTube: "Ищу YouTube-канал…",
 		RenameFeed:       "Переименовать ленту:",
 		CategoryPrompt:   "Папка ленты:",
 		ImportPrompt:     "Импорт OPML из:",
@@ -922,8 +927,9 @@ var ru = Strings{
 		NoFeeds:          "(лент нет) — нажмите a чтобы добавить",
 		FeedsHint:        "a доб · d удал · e переим · c папка · i импорт · E экспорт · tab раздел · esc закрыть",
 
-		NoFolders:    "(папок нет)",
-		FoldersHint:  "e переим · d удалить · tab раздел · esc закрыть",
+		NoFolders:    "(папок нет) — нажмите a чтобы добавить",
+		FoldersHint:  "a добавить · e переим · d удалить · tab раздел · esc закрыть",
+		FolderAdd:    "Название новой папки:",
 		FolderRename: "Переименовать папку:",
 
 		NoFolderOption:      "— (без папки)",

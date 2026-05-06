@@ -166,24 +166,32 @@ func (d *DB) RenameFeed(id int64, name string) error {
 // SetFeedCategory moves a feed into (or out of) a category. Empty
 // string means "uncategorized". Used by :categorymove command.
 func (d *DB) SetFeedCategory(id int64, category string) error {
-	_, err := d.sql.Exec(`UPDATE feeds SET category = ? WHERE id = ?`, category, id)
-	return err
+	tx, err := d.sql.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if category != "" {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO folders (name, position) VALUES (?, (SELECT COALESCE(MAX(position), -1) + 1 FROM folders))`, category); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE feeds SET category = ? WHERE id = ?`, category, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // RenameCategory renames one category to another across all feeds. The
 // new name may be empty, which moves matching feeds into the "Other"
 // bucket. No-op when no feeds match.
 func (d *DB) RenameCategory(oldName, newName string) error {
-	_, err := d.sql.Exec(
-		`UPDATE feeds SET category = ? WHERE category = ?`,
-		newName, oldName,
-	)
-	return err
+	return d.RenameFolder(oldName, newName)
 }
 
 // DeleteCategory empties the category of every feed that currently has
 // it, moving them into the "Other" bucket. Thin alias around
 // RenameCategory(name, "") that makes the caller's intent explicit.
 func (d *DB) DeleteCategory(name string) error {
-	return d.RenameCategory(name, "")
+	return d.DeleteFolder(name)
 }
