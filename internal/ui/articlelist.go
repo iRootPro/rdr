@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,15 +29,14 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 		return framePaneWithTitle(b.String(), title, active, width, height)
 	}
 
-	// Reserve fixed right-side columns for source chip and time + optional
-	// reading hint. Keeping source/time out of the title cell makes rows
-	// scan like a table instead of letting metadata float inside headlines.
+	// Reserve one quiet right-side gutter for metadata. Source and time live
+	// together ("Habr · 14m ago") so rows scan as headlines first instead of
+	// a table with multiple competing columns.
 	const whenCellW = 14
-	const maxSourceCellW = 13
-	const columnSepW = 2
+	const metaCellW = 24
 
 	// Detect cross-feed view: if any row carries a FeedName the loader is
-	// a folder/all-articles source, so reserve a fixed source column.
+	// a folder/all-articles source, so reserve room for source + time.
 	crossFeed := false
 	for _, a := range articles {
 		if a.FeedName != "" {
@@ -47,15 +47,11 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 
 	// Inner text area of the pane = width - 2 (padding inside border).
 	innerW := width - 2
-	sourceCellW := 0
+	metadataCellW := whenCellW
 	if crossFeed && innerW >= 54 {
-		sourceCellW = maxSourceCellW
+		metadataCellW = metaCellW
 	}
-	sepCellW := 0
-	if sourceCellW > 0 && innerW >= 70 {
-		sepCellW = columnSepW
-	}
-	titleCellW := innerW - whenCellW - sourceCellW - sepCellW
+	titleCellW := innerW - metadataCellW
 	if titleCellW < 1 {
 		titleCellW = 1
 	}
@@ -128,27 +124,31 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			rowBG = colorAltBG
 		}
 
-		// Article rows are dense and usually mostly unread. Rendering every
-		// unread headline in bold makes the pane feel heavy and tiring to scan,
-		// especially with large Nerd Font weights. Use color/contrast instead:
-		// unread = normal text, read = muted, selected = accent on row bg.
+		// Article rows are dense and usually mostly unread. Use a small marker
+		// for unread state, then reserve stronger color/weight for the selected
+		// row so the user's eye has one obvious landing point.
 		titleFG := colorListText
+		titleBold := false
 		if a.ReadAt != nil {
 			titleFG = colorMuted
 		}
 		if i == selected {
 			if active {
-				titleFG = colorSecondary
+				titleFG = colorText
+				titleBold = true
 			} else {
 				titleFG = colorMuted
 			}
 		}
 		rowTitleStyle := lipgloss.NewStyle().Foreground(titleFG).Background(rowBG)
-		whenFG := colorMuted
-		if i == selected && active {
-			whenFG = colorOrange
+		if titleBold {
+			rowTitleStyle = rowTitleStyle.Bold(true)
 		}
-		rowWhenStyle := lipgloss.NewStyle().Foreground(whenFG).Background(rowBG)
+		metaFG := colorMuted
+		if i == selected && active {
+			metaFG = colorOrange
+		}
+		rowMetaStyle := lipgloss.NewStyle().Foreground(metaFG).Background(rowBG)
 
 		prefixStyle := lipgloss.NewStyle().Background(rowBG)
 		if i == selected && active {
@@ -161,40 +161,21 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 			marker = lipgloss.NewStyle().Foreground(colorYellow).Background(rowBG).Render("★ ")
 		case a.BookmarkedAt != nil:
 			marker = lipgloss.NewStyle().Foreground(colorSecondary).Background(rowBG).Render("◆ ")
-		case a.ReadAt == nil:
-			// Unread state is already conveyed by bold title text. Avoid a
-			// repeated dot on every unread row: in unread-heavy views it turns
-			// into visual noise. Star/bookmark still use explicit markers.
-			marker = lipgloss.NewStyle().Background(rowBG).Render("  ")
+		case a.ReadAt == nil && i == selected && active:
+			marker = lipgloss.NewStyle().Foreground(colorAccent).Background(rowBG).Render("● ")
 		default:
 			marker = lipgloss.NewStyle().Background(rowBG).Render("  ")
 		}
 		title := prefixRendered + marker + rowTitleStyle.Render(truncate(a.Title, titleTextBudget))
-		whenText := timeAgo(a.PublishedAt, tr)
-		// Prepend a small reading-time hint when the body is cached. Build
-		// the timestamp as plain text first so long localized labels (e.g.
-		// "13 мин назад") are truncated before styling and never wrap into
-		// a second visual row.
-		if a.CachedBody != "" {
-			if mins := readingMinutes(a.CachedBody); mins > 0 {
-				whenText = fmt.Sprintf("%dm·%s", mins, whenText)
-			}
-		}
-		when := rowWhenStyle.Render(truncate(whenText, whenCellW))
+		metaText := articleMetadata(a, tr)
+		meta := rowMetaStyle.Render(truncate(metaText, metadataCellW))
 
 		titleCellStyle := lipgloss.NewStyle().Width(titleCellW).MaxWidth(titleCellW).Background(rowBG)
-		whenCellStyle := lipgloss.NewStyle().Width(whenCellW).MaxWidth(whenCellW).Align(lipgloss.Right).Background(rowBG)
-		cells := []string{titleCellStyle.Render(title)}
-		if sepCellW > 0 {
-			sep := lipgloss.NewStyle().Width(sepCellW).MaxWidth(sepCellW).Foreground(colorBorder).Background(rowBG).Render("│ ")
-			cells = append(cells, sep)
-		}
-		if sourceCellW > 0 {
-			sourceCellStyle := lipgloss.NewStyle().Width(sourceCellW).MaxWidth(sourceCellW).Background(rowBG)
-			cells = append(cells, sourceCellStyle.Render(sourceChip(a.FeedName, sourceCellW, i == selected && active, rowBG)))
-		}
-		cells = append(cells, whenCellStyle.Render(when))
-		line := lipgloss.JoinHorizontal(lipgloss.Top, cells...)
+		metaCellStyle := lipgloss.NewStyle().Width(metadataCellW).MaxWidth(metadataCellW).Align(lipgloss.Right).Background(rowBG)
+		line := lipgloss.JoinHorizontal(lipgloss.Top,
+			titleCellStyle.Render(title),
+			metaCellStyle.Render(meta),
+		)
 		if i == selected {
 			// Record line index before appending: position the preview
 			// overlay right below this row.
@@ -225,24 +206,36 @@ func renderArticleList(articles []db.Article, selected int, active bool, width, 
 	return framePaneWithTitle(body, title, active, width, height)
 }
 
-func sourceChip(name string, cellW int, selected bool, rowBG lipgloss.Color) string {
-	name = compactSourceName(strings.TrimSpace(name))
-	if name == "" || cellW < 3 {
-		return ""
+func articleMetadata(a db.Article, tr *i18n.Strings) string {
+	source := compactSourceName(strings.TrimSpace(a.FeedName))
+	when := timeAgo(a.PublishedAt, tr)
+	mins := 0
+	if a.CachedBody != "" {
+		mins = readingMinutes(a.CachedBody)
 	}
-	labelW := cellW - 1 // one leading gap before the source label
-	if labelW < 1 {
-		labelW = 1
+
+	if source == "" && mins == 0 {
+		return when
 	}
-	label := truncate(name, labelW)
-	// Keep the repeated source column quiet: in cross-feed views it appears
-	// on every row and bright teal competes with the headlines. Highlight it
-	// only on the active row.
-	style := lipgloss.NewStyle().Foreground(colorMuted).Background(rowBG)
-	if selected {
-		style = style.Foreground(colorTeal)
+
+	var b strings.Builder
+	if source != "" {
+		b.WriteString(source)
 	}
-	return lipgloss.NewStyle().Background(rowBG).Render(" ") + style.Render(label)
+	if mins > 0 {
+		if b.Len() > 0 {
+			b.WriteString(" · ")
+		}
+		b.WriteString(strconv.Itoa(mins))
+		b.WriteByte('m')
+	}
+	if when != "" {
+		if b.Len() > 0 {
+			b.WriteString(" · ")
+		}
+		b.WriteString(when)
+	}
+	return b.String()
 }
 
 func compactSourceName(name string) string {

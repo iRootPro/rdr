@@ -94,10 +94,16 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		e := entries[i]
 
 		if separatorBefore[i] {
+			sepW := nameCellW + counterCol - 4
+			if sepW < 1 {
+				sepW = 1
+			}
 			sep := lipgloss.NewStyle().
+				Width(nameCellW + counterCol).
+				MaxWidth(nameCellW + counterCol).
 				Foreground(colorBorder).
 				Background(colorBG).
-				Render(strings.Repeat("─", nameCellW+counterCol))
+				Render("  " + strings.Repeat("─", sepW))
 			b.WriteString(sep)
 			b.WriteString("\n")
 			rowsUsed++
@@ -113,7 +119,8 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		if i == selected {
 			prefix = "› "
 			if active {
-				nameStyle = itemSelected.Background(rowBG)
+				prefix = "▌ "
+				nameStyle = lipgloss.NewStyle().Foreground(colorText).Background(rowBG).Bold(true)
 			} else {
 				nameStyle = itemSelectedInactive.Background(rowBG)
 			}
@@ -152,7 +159,11 @@ func renderFeedList(entries []feedEntry, selected int, active bool, width, heigh
 		if nameBudget < 1 {
 			nameBudget = 1
 		}
-		prefixRendered := lipgloss.NewStyle().Background(rowBG).Render(prefix)
+		prefixStyle := lipgloss.NewStyle().Background(rowBG)
+		if i == selected && active {
+			prefixStyle = prefixStyle.Foreground(colorAccent).Bold(true)
+		}
+		prefixRendered := prefixStyle.Render(prefix)
 		nameText := nameStyle.Render(truncate(e.Name, nameBudget))
 		name := prefixRendered + icon + nameText
 

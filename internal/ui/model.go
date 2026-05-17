@@ -2333,17 +2333,8 @@ func (m Model) View() string {
 				{Text: m.spin.View() + " " + m.status, FG: colorText, BG: colorAltBG},
 			}, m.width)
 		} else {
-			scrollPct := -1
-			if total := m.reader.TotalLineCount() - m.reader.Height; total > 0 {
-				scrollPct = m.reader.YOffset * 100 / total
-				if scrollPct > 100 {
-					scrollPct = 100
-				}
-			} else if m.reader.TotalLineCount() > 0 {
-				// Content fits on screen — show 100%.
-				scrollPct = 100
-			}
-			status = renderPowerline(readerSegments(feedName, m.readerArt.Title, titleBudget, scrollPct), m.width)
+			scrollLabel := readerScrollLabel(m.reader.TotalLineCount(), m.reader.Height, m.reader.YOffset)
+			status = renderPowerline(readerSegments(feedName, m.readerArt.Title, titleBudget, scrollLabel), m.width)
 		}
 		if m.err != nil {
 			status = paintLineBG(status+"  "+errStyle.Render("! "+m.err.Error()), m.width)
@@ -3130,8 +3121,26 @@ func (m Model) loadCurrentCmd() tea.Cmd {
 }
 
 func (m Model) helpView() string {
-	raw := m.help.ShortHelpView(shortHelpFor(m.focus, m.keys, m.currentEntryIsLibrary()))
+	raw := renderShortHelp(shortHelpFor(m.focus, m.keys, m.currentEntryIsLibrary()))
 	return paintLineBG("  "+raw, m.width)
+}
+
+func renderShortHelp(bindings []key.Binding) string {
+	var b strings.Builder
+	sepStyle := lipgloss.NewStyle().Foreground(colorBorder).Background(colorBG)
+	for _, binding := range bindings {
+		h := binding.Help()
+		if h.Key == "" || h.Desc == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString(sepStyle.Render(" · "))
+		}
+		b.WriteString(helpKey.Render(h.Key))
+		b.WriteByte(' ')
+		b.WriteString(helpDesc.Render(h.Desc))
+	}
+	return b.String()
 }
 
 func (m Model) feedListInfo() feedListInfo {

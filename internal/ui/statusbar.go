@@ -100,8 +100,8 @@ func statusSegments(status, filterLabel string, sortField string, sortReverse bo
 }
 
 // readerSegments builds the segment list for the full-screen reader view.
-// scrollPct is 0-100 (percentage through article), -1 if unknown.
-func readerSegments(feedName, articleTitle string, maxTitleW int, scrollPct int) []segment {
+// scrollLabel is TOP / BOT / ALL / "<n>%", or empty when unknown.
+func readerSegments(feedName, articleTitle string, maxTitleW int, scrollLabel string) []segment {
 	if len(articleTitle) > maxTitleW && maxTitleW > 3 {
 		articleTitle = articleTitle[:maxTitleW-1] + "…"
 	}
@@ -110,17 +110,25 @@ func readerSegments(feedName, articleTitle string, maxTitleW int, scrollPct int)
 		{Text: feedName, FG: colorBG, BG: colorGreen, Bold: true},
 		{Text: articleTitle, FG: colorText, BG: colorAltBG},
 	}
-	if scrollPct >= 0 {
-		var label string
-		switch {
-		case scrollPct <= 0:
-			label = "TOP"
-		case scrollPct >= 100:
-			label = "BOT"
-		default:
-			label = fmt.Sprintf("%d%%", scrollPct)
-		}
-		segs = append(segs, segment{Text: label, FG: colorBG, BG: colorMuted, Bold: true})
+	if scrollLabel != "" {
+		segs = append(segs, segment{Text: scrollLabel, FG: colorBG, BG: colorMuted, Bold: true})
 	}
 	return segs
+}
+
+func readerScrollLabel(totalLines, height, offset int) string {
+	if totalLines <= 0 || height <= 0 {
+		return ""
+	}
+	maxOffset := totalLines - height
+	if maxOffset <= 0 {
+		return "ALL"
+	}
+	if offset <= 0 {
+		return "TOP"
+	}
+	if offset >= maxOffset {
+		return "BOT"
+	}
+	return fmt.Sprintf("%d%%", offset*100/maxOffset)
 }

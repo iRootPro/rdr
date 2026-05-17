@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 
@@ -107,6 +109,29 @@ func TestRecomputeMatches_ClampsSelection(t *testing.T) {
 	}
 }
 
+func TestRenderSearchLeft_SelectedResultUsesStrongBar(t *testing.T) {
+	ti := textinput.New()
+	ti.Prompt = "› "
+	ti.SetValue("vpn")
+	now := time.Now()
+	m := Model{
+		tr:          testTR,
+		searchInput: ti,
+		searchAll: []db.SearchItem{
+			{Title: "Selected VPN result", FeedName: "Habr", PublishedAt: now.Add(-3 * time.Hour)},
+		},
+	}
+	recomputeMatches(&m)
+
+	out := renderSearchLeft(m, 90, 16)
+	line := renderedLineContaining(out, "Selected VPN result")
+	if !strings.Contains(line, "▌ Selected VPN result") {
+		t.Fatalf("selected search result should use a strong active bar, got line %q\nfull output:\n%s", line, stripANSI(out))
+	}
+	if strings.Contains(line, "›") {
+		t.Fatalf("selected search result should not use the weaker chevron marker, got line %q", line)
+	}
+}
 func containsCI(hay, needle string) bool {
 	hl := []rune(hay)
 	nl := []rune(needle)

@@ -364,19 +364,28 @@ func renderSearchLeft(m Model, width, height int) string {
 		rendered := 0
 		for i := start; i < end; i++ {
 			item := m.searchAll[m.searchMatches[i]]
+			selected := hasQuery && i == m.searchSel
+			rowBG := colorBG
+			if selected {
+				rowBG = colorAltBG
+			}
 			prefix := "  "
-			style := unreadStyle
+			titleStyle := lipgloss.NewStyle().Foreground(colorText).Background(rowBG)
 			if item.ReadAt != nil {
-				style = readStyle
+				titleStyle = titleStyle.Foreground(colorMuted)
 			}
-			if hasQuery && i == m.searchSel {
-				prefix = "› "
-				style = itemSelected
+			if selected {
+				prefix = "▌ "
+				titleStyle = titleStyle.Foreground(colorText).Bold(true)
 			}
-			feedTag := searchFeedTag.Render(truncate(item.FeedName, 12))
-			title := style.Render(prefix + truncate(item.Title, titleW))
-			when := timeAgoStyle.Render(timeAgo(item.PublishedAt, m.tr))
-			leftCol := lipgloss.NewStyle().Width(width - 16).MaxWidth(width - 16).Inline(true).Render(title + "  " + feedTag)
+			prefixStyle := lipgloss.NewStyle().Background(rowBG)
+			if selected {
+				prefixStyle = prefixStyle.Foreground(colorAccent).Bold(true)
+			}
+			feedTag := searchFeedTag.Background(rowBG).Render(truncate(item.FeedName, 12))
+			title := prefixStyle.Render(prefix) + titleStyle.Render(truncate(item.Title, titleW))
+			when := timeAgoStyle.Background(rowBG).Render(timeAgo(item.PublishedAt, m.tr))
+			leftCol := lipgloss.NewStyle().Width(width - 16).MaxWidth(width - 16).Inline(true).Background(rowBG).Render(title + "  " + feedTag)
 			line := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, when)
 			b.WriteString(line)
 			b.WriteString("\n")
@@ -484,4 +493,3 @@ func renderSearchPreview(m Model, width, height int) string {
 	c := fillBackground(b.String(), width-4)
 	return paneInactive.Width(width - 2).Height(innerH).Render(c)
 }
-
