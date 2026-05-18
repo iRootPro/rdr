@@ -26,6 +26,14 @@ const (
 	maxConcurrentFetches = 8
 )
 
+type httpStatusError struct {
+	code int
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("http %d", e.code)
+}
+
 type FetchResult struct {
 	Feed    db.Feed
 	Added   int
@@ -46,17 +54,17 @@ func New(d *db.DB) *Fetcher {
 }
 
 func (f *Fetcher) FetchOne(ctx context.Context, feed db.Feed) (FetchResult, error) {
-	body, err := f.get(ctx, feed.URL)
+	parsed, err := f.fetchParsedFeed(ctx, feed.URL)
 	if err != nil {
-		return FetchResult{}, err
-	}
-	defer body.Close()
-
-	// gofeed.Parser lazy-inits shared fields on Parse, so it is not safe for
-	// concurrent use. Constructing a fresh parser per call sidesteps the race.
-	parsed, err := gofeed.NewParser().Parse(body)
-	if err != nil {
-		return FetchResult{}, fmt.Errorf("parse feed: %w", err)
+		if shouldFetchYouTubeHTMLFallback(feed.URL, err) {
+			rssErr := err
+			parsed, err = f.fetchYouTubeHTMLFeed(ctx, feed.URL)
+			if err != nil {
+				return FetchResult{}, fmt.Errorf("%w; youtube fallback: %v", rssErr, err)
+			}
+		} else {
+			return FetchResult{}, err
+		}
 	}
 
 	// Snapshot the fetch start time before any upserts so TrimArticles
@@ -190,6 +198,22 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]FetchResult, error) {
 	return results, nil
 }
 
+func (f *Fetcher) fetchParsedFeed(ctx context.Context, url string) (*gofeed.Feed, error) {
+	body, err := f.get(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	// gofeed.Parser lazy-inits shared fields on Parse, so it is not safe for
+	// concurrent use. Constructing a fresh parser per call sidesteps the race.
+	parsed, err := gofeed.NewParser().Parse(body)
+	if err != nil {
+		return nil, fmt.Errorf("parse feed: %w", err)
+	}
+	return parsed, nil
+}
+
 func (f *Fetcher) get(ctx context.Context, url string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -202,7 +226,7 @@ func (f *Fetcher) get(ctx context.Context, url string) (io.ReadCloser, error) {
 	}
 	if resp.StatusCode >= 400 {
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("http %d", resp.StatusCode)
+		return nil, &httpStatusError{code: resp.StatusCode}
 	}
 	return resp.Body, nil
 }

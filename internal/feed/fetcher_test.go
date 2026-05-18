@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -133,6 +135,127 @@ func TestFetchOne_HTTP500ReturnsError(t *testing.T) {
 	if _, err := f.FetchOne(context.Background(), feed); err == nil {
 		t.Fatal("expected http error, got nil")
 	}
+}
+
+func TestFetchOne_YouTubeRSS404FallsBackToChannelPage(t *testing.T) {
+	const channelID = "UCtest123"
+	const videoID = "abc123XYZ"
+
+	d := openTestDB(t)
+	var mu sync.Mutex
+	var sawRSS, sawFallback bool
+	var fallbackUA, unexpectedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/feeds/videos.xml":
+			sawRSS = true
+			http.NotFound(w, r)
+		case "/channel/" + channelID + "/videos":
+			sawFallback = true
+			fallbackUA = r.Header.Get("User-Agent")
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte(`<!doctype html><html><head><title>Example Channel - YouTube</title></head><body><script>var ytInitialData = {"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Videos","selected":true,"content":{"lockupViewModel":{"contentId":"` + videoID + `","contentType":"LOCKUP_CONTENT_TYPE_VIDEO","metadata":{"lockupMetadataViewModel":{"title":{"content":"Fallback video"},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"12 views"}},{"text":{"content":"2 weeks ago"}}]}]}}}}}}}}]}}};</script></body></html>`))
+		default:
+			unexpectedPath = r.URL.Path
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	target, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	feedURL := "https://www.youtube.com/feeds/videos.xml?channel_id=" + channelID
+	feed, err := d.UpsertFeed("YouTube", feedURL, "")
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
+	f := New(d)
+	f.client = &http.Client{Transport: rewriteHostTransport{target: target, base: http.DefaultTransport}}
+
+	result, err := f.FetchOne(context.Background(), feed)
+	if err != nil {
+		t.Fatalf("FetchOne: %v", err)
+	}
+	mu.Lock()
+	gotSawRSS, gotSawFallback := sawRSS, sawFallback
+	gotFallbackUA, gotUnexpectedPath := fallbackUA, unexpectedPath
+	mu.Unlock()
+	if gotUnexpectedPath != "" {
+		t.Fatalf("unexpected path %s", gotUnexpectedPath)
+	}
+	if !gotSawRSS || !gotSawFallback {
+		t.Fatalf("requests: sawRSS=%v sawFallback=%v", gotSawRSS, gotSawFallback)
+	}
+	if gotFallbackUA != youtubeBrowserUserAgent {
+		t.Fatalf("fallback User-Agent: got %q, want %q", gotFallbackUA, youtubeBrowserUserAgent)
+	}
+	if result.Added != 1 {
+		t.Fatalf("Added: got %d, want 1", result.Added)
+	}
+
+	articles, err := d.ListArticles(feed.ID, 10)
+	if err != nil {
+		t.Fatalf("ListArticles: %v", err)
+	}
+	if len(articles) != 1 {
+		t.Fatalf("articles: got %d, want 1", len(articles))
+	}
+	if articles[0].Title != "Fallback video" {
+		t.Fatalf("title: got %q", articles[0].Title)
+	}
+	if articles[0].URL != "https://www.youtube.com/watch?v="+videoID {
+		t.Fatalf("url: got %q", articles[0].URL)
+	}
+
+	result, err = f.FetchOne(context.Background(), feed)
+	if err != nil {
+		t.Fatalf("second FetchOne: %v", err)
+	}
+	if result.Added != 0 || result.Updated != 1 {
+		t.Fatalf("second result: Added=%d Updated=%d, want Added=0 Updated=1", result.Added, result.Updated)
+	}
+	articles, err = d.ListArticles(feed.ID, 10)
+	if err != nil {
+		t.Fatalf("ListArticles after second fetch: %v", err)
+	}
+	if len(articles) != 1 {
+		t.Fatalf("articles after second fetch: got %d, want 1", len(articles))
+	}
+}
+
+func TestFetchYouTubeHTMLFeedLive(t *testing.T) {
+	if os.Getenv("RDR_LIVE_YOUTUBE") != "1" {
+		t.Skip("set RDR_LIVE_YOUTUBE=1 to hit youtube.com")
+	}
+
+	f := &Fetcher{client: &http.Client{Timeout: 30 * time.Second}}
+	parsed, err := f.fetchYouTubeHTMLFeed(context.Background(), "https://www.youtube.com/feeds/videos.xml?channel_id=UCHnyfMqiRRG1u-2MsSQLbXA")
+	if err != nil {
+		t.Fatalf("fetchYouTubeHTMLFeed: %v", err)
+	}
+	if len(parsed.Items) == 0 {
+		t.Fatal("expected at least one video")
+	}
+	if parsed.Items[0].Title == "" || parsed.Items[0].Link == "" {
+		t.Fatalf("first item missing title/link: %+v", parsed.Items[0])
+	}
+}
+
+type rewriteHostTransport struct {
+	target *url.URL
+	base   http.RoundTripper
+}
+
+func (t rewriteHostTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.URL.Scheme = t.target.Scheme
+	clone.URL.Host = t.target.Host
+	clone.Host = t.target.Host
+	return t.base.RoundTrip(clone)
 }
 
 func TestFetchOne_EmptyTitleUsesFallback(t *testing.T) {
