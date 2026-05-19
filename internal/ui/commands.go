@@ -15,9 +15,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/rdr/internal/db"
-	"github.com/iRootPro/rdr/internal/rlog"
 	"github.com/iRootPro/rdr/internal/feed"
 	"github.com/iRootPro/rdr/internal/i18n"
+	"github.com/iRootPro/rdr/internal/rlog"
 )
 
 // osc52Copy writes an OSC 52 escape sequence to stderr so the terminal
@@ -570,7 +570,7 @@ func dispatchCommand(m Model, line string) (tea.Model, tea.Cmd) {
 }
 
 // batchApplyCmd runs a query against the full article set and applies the
-// given action to every match. action ∈ {"read","unread","star","unstar"}.
+// given action to every match. action ∈ {"read","unread","star","unstar","bookmark","unbookmark"}.
 // The heavy work (load + filter + UPDATE) happens in a goroutine so the
 // main loop stays responsive.
 func batchApplyCmd(d *db.DB, queryStr, action string) tea.Cmd {
@@ -586,17 +586,19 @@ func batchApplyCmd(d *db.DB, queryStr, action string) tea.Cmd {
 		var ids []int64
 		for _, a := range all {
 			it := db.SearchItem{
-				Title:       a.Title,
-				FeedName:    a.FeedName,
-				Description: a.Description,
-				PublishedAt: a.PublishedAt,
-				ReadAt:      a.ReadAt,
-				StarredAt:   a.StarredAt,
+				Title:        a.Title,
+				FeedName:     a.FeedName,
+				Description:  a.Description,
+				PublishedAt:  a.PublishedAt,
+				ReadAt:       a.ReadAt,
+				StarredAt:    a.StarredAt,
+				BookmarkedAt: a.BookmarkedAt,
 			}
 			if EvalQuery(atoms, it) {
 				ids = append(ids, a.ID)
 			}
 		}
+		changed := len(ids)
 		switch action {
 		case "read":
 			err = d.BulkMarkRead(ids)
@@ -607,14 +609,17 @@ func batchApplyCmd(d *db.DB, queryStr, action string) tea.Cmd {
 		case "unstar":
 			err = d.BulkSetStarred(ids, false)
 		case "bookmark":
-			_, err = d.BulkSetBookmarked(ids, true)
+			changed, err = d.BulkSetBookmarked(ids, true)
 		case "unbookmark":
-			_, err = d.BulkSetBookmarked(ids, false)
+			changed, err = d.BulkSetBookmarked(ids, false)
 		default:
 			return errMsg{fmt.Errorf("batch: unknown action %q", action)}
 		}
 		if err != nil {
 			return errMsg{err}
+		}
+		if action == "bookmark" || action == "unbookmark" {
+			rlog.Logf("bookmark", "batch action=%s query=%q matched=%d changed=%d", action, queryStr, len(ids), changed)
 		}
 		return batchAppliedMsg{action: action, count: len(ids)}
 	}
@@ -635,12 +640,13 @@ func batchCopyCmd(d *db.DB, format, query string, tr *i18n.Strings) tea.Cmd {
 		var lines []string
 		for _, a := range all {
 			it := db.SearchItem{
-				Title:       a.Title,
-				FeedName:    a.FeedName,
-				Description: a.Description,
-				PublishedAt: a.PublishedAt,
-				ReadAt:      a.ReadAt,
-				StarredAt:   a.StarredAt,
+				Title:        a.Title,
+				FeedName:     a.FeedName,
+				Description:  a.Description,
+				PublishedAt:  a.PublishedAt,
+				ReadAt:       a.ReadAt,
+				StarredAt:    a.StarredAt,
+				BookmarkedAt: a.BookmarkedAt,
 			}
 			if !EvalQuery(atoms, it) {
 				continue
@@ -787,4 +793,3 @@ func applySort(articles []db.Article, field string, reverse bool) {
 		}
 	})
 }
-

@@ -2915,6 +2915,7 @@ func toggleBookmarkCmd(d *db.DB, articleID int64) tea.Cmd {
 		if err != nil {
 			return errMsg{err}
 		}
+		rlog.Logf("bookmark", "toggle article_id=%d bookmarked=%t", articleID, bookmarked)
 		return bookmarkToggledMsg{articleID: articleID, bookmarked: bookmarked}
 	}
 }
@@ -3251,9 +3252,13 @@ func loadSmartFoldersCmd(d *db.DB) tea.Cmd {
 // doesn't trash the currently displayed article list.
 func loadAllArticlesCmd(d *db.DB) tea.Cmd {
 	return func() tea.Msg {
-		all, err := d.ListAllArticles(2000)
+		const smartFolderArticleLimit = 2000
+		all, err := d.ListAllArticlesIncludingSaved(smartFolderArticleLimit)
 		if err != nil {
 			return errMsg{err}
+		}
+		if extra := len(all) - smartFolderArticleLimit; extra > 0 {
+			rlog.Logf("smart-folder", "included %d saved/starred articles outside newest-%d limit", extra, smartFolderArticleLimit)
 		}
 		return allArticlesLoadedMsg{articles: all}
 	}
@@ -3268,7 +3273,7 @@ func loadFolderArticlesCmd(d *db.DB, folderIdx int, query string) tea.Cmd {
 		if err != nil {
 			return errMsg{fmt.Errorf("folder query: %w", err)}
 		}
-		all, err := d.ListAllArticles(2000)
+		all, err := d.ListAllArticlesIncludingSaved(2000)
 		if err != nil {
 			return errMsg{err}
 		}

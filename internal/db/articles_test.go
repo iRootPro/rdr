@@ -78,6 +78,63 @@ func TestListArticles_OrdersByPublishedDesc(t *testing.T) {
 	}
 }
 
+func TestListAllArticlesIncludingSaved_KeepsSavedOutsideLimit(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	base := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 10; i++ {
+		a := newArticle(f.ID, fmt.Sprintf("https://a.example/%02d", i), fmt.Sprintf("art%d", i), base.Add(time.Duration(i)*time.Minute))
+		if _, err := d.UpsertArticle(a); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+	}
+	list, err := d.ListArticles(f.ID, 20)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, a := range list {
+		switch a.Title {
+		case "art0":
+			if _, err := d.ToggleBookmark(a.ID); err != nil {
+				t.Fatalf("bookmark old article: %v", err)
+			}
+		case "art1":
+			if _, err := d.ToggleStar(a.ID); err != nil {
+				t.Fatalf("star old article: %v", err)
+			}
+		}
+	}
+
+	regular, err := d.ListAllArticles(5)
+	if err != nil {
+		t.Fatalf("ListAllArticles: %v", err)
+	}
+	if containsTitle(regular, "art0") || containsTitle(regular, "art1") {
+		t.Fatalf("test setup invalid: old saved rows should be outside regular limit: %+v", regular)
+	}
+
+	withSaved, err := d.ListAllArticlesIncludingSaved(5)
+	if err != nil {
+		t.Fatalf("ListAllArticlesIncludingSaved: %v", err)
+	}
+	if !containsTitle(withSaved, "art0") || !containsTitle(withSaved, "art1") {
+		t.Fatalf("saved rows outside limit were not included: %+v", withSaved)
+	}
+	if len(withSaved) != 7 {
+		t.Fatalf("want 5 newest + 2 saved outside limit = 7 rows, got %d", len(withSaved))
+	}
+}
+
+func containsTitle(list []Article, title string) bool {
+	for _, a := range list {
+		if a.Title == title {
+			return true
+		}
+	}
+	return false
+}
+
 func TestTrimArticles_RemovesOldestReadBeyondLimit(t *testing.T) {
 	d := openTestDB(t)
 	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")

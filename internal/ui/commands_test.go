@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -128,6 +129,105 @@ func TestDispatchCommand_UnknownSetsErr(t *testing.T) {
 	if m2.(Model).err == nil {
 		t.Fatal("expected error for unknown command")
 	}
+}
+
+func openCommandTestDB(t *testing.T) *db.DB {
+	t.Helper()
+	d, err := db.Open(filepath.Join(t.TempDir(), "rdr.db"))
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	return d
+}
+
+func seedTwoBookmarkArticles(t *testing.T, d *db.DB) {
+	t.Helper()
+	f, err := d.UpsertFeed("A", "https://a.example/rss", "")
+	if err != nil {
+		t.Fatalf("UpsertFeed: %v", err)
+	}
+	base := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	for i, title := range []string{"bookmarked", "plain"} {
+		a := db.Article{
+			FeedID:      f.ID,
+			Title:       title,
+			URL:         fmt.Sprintf("https://a.example/%s", title),
+			Description: "desc",
+			Content:     "body",
+			PublishedAt: base.Add(time.Duration(i) * time.Minute),
+		}
+		if _, err := d.UpsertArticle(a); err != nil {
+			t.Fatalf("UpsertArticle: %v", err)
+		}
+	}
+	list, err := d.ListArticles(f.ID, 10)
+	if err != nil {
+		t.Fatalf("ListArticles: %v", err)
+	}
+	for _, a := range list {
+		if a.Title == "bookmarked" {
+			if _, err := d.ToggleBookmark(a.ID); err != nil {
+				t.Fatalf("ToggleBookmark: %v", err)
+			}
+			return
+		}
+	}
+	t.Fatal("seeded bookmarked article not found")
+}
+
+func TestBatchApplyUnbookmarkedQueryKeepsBookmarkedRows(t *testing.T) {
+	d := openCommandTestDB(t)
+	seedTwoBookmarkArticles(t, d)
+
+	msg := batchApplyCmd(d, "unbookmarked", "unbookmark")()
+	applied, ok := msg.(batchAppliedMsg)
+	if !ok {
+		t.Fatalf("batchApplyCmd returned %T: %#v", msg, msg)
+	}
+	if applied.count != 1 {
+		t.Fatalf("matched count = %d, want 1", applied.count)
+	}
+	list, err := d.ListAllArticles(10)
+	if err != nil {
+		t.Fatalf("ListAllArticles: %v", err)
+	}
+	for _, a := range list {
+		if a.Title == "bookmarked" {
+			if a.BookmarkedAt == nil {
+				t.Fatal("bookmarked row was incorrectly matched by unbookmarked query and cleared")
+			}
+			return
+		}
+	}
+	t.Fatal("bookmarked row not found")
+}
+
+func TestBatchApplyBookmarkedQueryMatchesBookmarkedRows(t *testing.T) {
+	d := openCommandTestDB(t)
+	seedTwoBookmarkArticles(t, d)
+
+	msg := batchApplyCmd(d, "bookmarked", "unbookmark")()
+	applied, ok := msg.(batchAppliedMsg)
+	if !ok {
+		t.Fatalf("batchApplyCmd returned %T: %#v", msg, msg)
+	}
+	if applied.count != 1 {
+		t.Fatalf("matched count = %d, want 1", applied.count)
+	}
+	list, err := d.ListAllArticles(10)
+	if err != nil {
+		t.Fatalf("ListAllArticles: %v", err)
+	}
+	for _, a := range list {
+		if a.Title == "bookmarked" {
+			if a.BookmarkedAt != nil {
+				t.Fatal("bookmarked query matched but unbookmark did not clear bookmarked row")
+			}
+			return
+		}
+	}
+	t.Fatal("bookmarked row not found")
 }
 
 func TestHistoryFile_RoundTrip(t *testing.T) {

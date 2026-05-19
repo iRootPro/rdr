@@ -9,20 +9,20 @@ import (
 )
 
 type Article struct {
-	ID          int64
-	FeedID      int64
-	FeedName    string // transient: populated only by cross-feed loaders
-	Title       string
-	URL         string
-	Description string
-	Content     string
-	PublishedAt time.Time
-	ReadAt      *time.Time
+	ID           int64
+	FeedID       int64
+	FeedName     string // transient: populated only by cross-feed loaders
+	Title        string
+	URL          string
+	Description  string
+	Content      string
+	PublishedAt  time.Time
+	ReadAt       *time.Time
 	StarredAt    *time.Time
 	BookmarkedAt *time.Time
 	CachedAt     *time.Time
-	CachedBody  string
-	CreatedAt   time.Time
+	CachedBody   string
+	CreatedAt    time.Time
 }
 
 // UpsertArticle inserts or updates an article and returns whether the row
@@ -169,7 +169,43 @@ func (d *DB) ListAllArticles(limit int) ([]Article, error) {
 		return nil, err
 	}
 	defer rows.Close()
+	return scanArticleRows(rows)
+}
 
+// ListAllArticlesIncludingSaved returns the newest cross-feed articles,
+// plus any explicitly saved rows (starred or bookmarked) that fall outside
+// the newest-N window. Smart folders use this so Read Later / Starred are
+// complete even when high-volume feeds push older saved articles past the
+// normal UI limit.
+func (d *DB) ListAllArticlesIncludingSaved(limit int) ([]Article, error) {
+	if limit <= 0 {
+		limit = 2000
+	}
+	rows, err := d.sql.Query(`
+		WITH newest AS (
+			SELECT a.id
+			FROM articles a
+			JOIN feeds f ON f.id = a.feed_id
+			ORDER BY a.published_at DESC, a.id DESC
+			LIMIT ?
+		)
+		SELECT a.id, a.feed_id, f.name, a.title, a.url, a.description, a.content,
+		       a.published_at, a.read_at, a.starred_at, a.bookmarked_at, a.cached_at, a.cached_body, a.created_at
+		FROM articles a
+		JOIN feeds f ON f.id = a.feed_id
+		WHERE a.id IN (SELECT id FROM newest)
+		   OR a.starred_at IS NOT NULL
+		   OR a.bookmarked_at IS NOT NULL
+		ORDER BY a.published_at DESC, a.id DESC
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArticleRows(rows)
+}
+
+func scanArticleRows(rows *sql.Rows) ([]Article, error) {
 	var out []Article
 	for rows.Next() {
 		var (
