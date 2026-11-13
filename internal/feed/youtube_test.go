@@ -104,13 +104,28 @@ func TestParseYouTubeVideosHTML_UsesSelectedVideosTabOnly(t *testing.T) {
 
 func TestParseYouTubeRelativeTime(t *testing.T) {
 	now := time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC)
-	got := parseYouTubeRelativeTime("2 weeks ago", now)
-	if got == nil {
-		t.Fatal("got nil")
+	cases := []struct {
+		input string
+		age   time.Duration
+	}{
+		{"2 weeks ago", 14 * 24 * time.Hour},
+		{"2\u00a0г. назад", 2 * 365 * 24 * time.Hour},
+		{"3 мес. назад", 90 * 24 * time.Hour},
+		{"45 мин. назад", 45 * time.Minute},
+		{"2 дня назад", 2 * 24 * time.Hour},
+		{"5 дней назад", 5 * 24 * time.Hour},
+		{"30 сек. назад", 30 * time.Second},
+		{"вчера", 24 * time.Hour},
 	}
-	want := now.Add(-14 * 24 * time.Hour)
-	if !got.Equal(want) {
-		t.Fatalf("got %s, want %s", got.Format(time.RFC3339), want.Format(time.RFC3339))
+	for _, tc := range cases {
+		got := parseYouTubeRelativeTime(tc.input, now)
+		if got == nil {
+			t.Fatalf("parseYouTubeRelativeTime(%q) = nil", tc.input)
+		}
+		want := now.Add(-tc.age)
+		if !got.Equal(want) {
+			t.Fatalf("parseYouTubeRelativeTime(%q) = %s, want %s", tc.input, got.Format(time.RFC3339), want.Format(time.RFC3339))
+		}
 	}
 }
 

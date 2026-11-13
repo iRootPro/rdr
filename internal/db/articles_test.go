@@ -56,6 +56,66 @@ func TestUpsertArticle_InsertThenUpdatePreservesReadAt(t *testing.T) {
 	}
 }
 
+func TestUpsertArticle_EstimatedDateDoesNotReplaceKnownDate(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	known := time.Date(2024, 11, 13, 12, 0, 0, 0, time.UTC)
+
+	a := newArticle(f.ID, "https://a.example/1", "original", known)
+	if _, err := d.UpsertArticle(a); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	a.Title = "refreshed without source date"
+	a.PublishedAt = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	a.PublishedAtEstimated = true
+	if _, err := d.UpsertArticle(a); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	articles, err := d.ListArticles(f.ID, 10)
+	if err != nil {
+		t.Fatalf("ListArticles: %v", err)
+	}
+	if len(articles) != 1 {
+		t.Fatalf("articles: got %d, want 1", len(articles))
+	}
+	if !articles[0].PublishedAt.Equal(known) {
+		t.Fatalf("published_at = %s, want preserved %s", articles[0].PublishedAt, known)
+	}
+}
+
+func TestUpsertArticle_KnownDateReplacesEstimatedDate(t *testing.T) {
+	d := openTestDB(t)
+	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")
+	estimated := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	known := time.Date(2024, 11, 13, 12, 0, 0, 0, time.UTC)
+
+	a := newArticle(f.ID, "https://a.example/1", "without source date", estimated)
+	a.PublishedAtEstimated = true
+	if _, err := d.UpsertArticle(a); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	a.Title = "with source date"
+	a.PublishedAt = known
+	a.PublishedAtEstimated = false
+	if _, err := d.UpsertArticle(a); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	articles, err := d.ListArticles(f.ID, 10)
+	if err != nil {
+		t.Fatalf("ListArticles: %v", err)
+	}
+	if len(articles) != 1 {
+		t.Fatalf("articles: got %d, want 1", len(articles))
+	}
+	if !articles[0].PublishedAt.Equal(known) {
+		t.Fatalf("published_at = %s, want source date %s", articles[0].PublishedAt, known)
+	}
+}
+
 func TestListArticles_OrdersByPublishedDesc(t *testing.T) {
 	d := openTestDB(t)
 	f, _ := d.UpsertFeed("A", "https://a.example/rss", "")

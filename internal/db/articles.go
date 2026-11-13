@@ -23,6 +23,12 @@ type Article struct {
 	CachedAt     *time.Time
 	CachedBody   string
 	CreatedAt    time.Time
+
+	// PublishedAtEstimated reports that PublishedAt was substituted locally
+	// because the upstream item did not provide a publication timestamp. It is
+	// transient: an estimated timestamp is stored for a new row, but must not
+	// overwrite a date already known for an existing article.
+	PublishedAtEstimated bool
 }
 
 // UpsertArticle inserts or updates an article and returns whether the row
@@ -58,9 +64,9 @@ func (d *DB) UpsertArticle(a Article) (bool, error) {
 			title           = excluded.title,
 			description     = excluded.description,
 			content         = excluded.content,
-			published_at    = excluded.published_at,
+			published_at    = CASE WHEN ? THEN articles.published_at ELSE excluded.published_at END,
 			last_fetched_at = excluded.last_fetched_at
-	`, a.FeedID, a.Title, a.URL, a.Description, a.Content, a.PublishedAt, fetchedAt)
+	`, a.FeedID, a.Title, a.URL, a.Description, a.Content, a.PublishedAt, fetchedAt, a.PublishedAtEstimated)
 	if err != nil {
 		return false, fmt.Errorf("upsert article: %w", err)
 	}

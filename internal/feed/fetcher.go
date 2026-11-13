@@ -251,6 +251,7 @@ func mapItem(feedID int64, item *gofeed.Item) db.Article {
 		a.PublishedAt = *item.UpdatedParsed
 	} else {
 		a.PublishedAt = time.Now().UTC()
+		a.PublishedAtEstimated = true
 	}
 	return a
 }

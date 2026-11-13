@@ -434,7 +434,20 @@ func parseYouTubeRelativeTime(s string, now time.Time) *time.Time {
 
 func youtubeRelativeDuration(s string) (time.Duration, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
+	// YouTube localizes the channel page independently of our Accept-Language
+	// header. In particular, Russian pages use non-breaking spaces and compact
+	// forms such as "2 г. назад". Normalize these before matching units.
+	s = strings.NewReplacer("\u00a0", " ", "\u202f", " ", ".", "").Replace(s)
 	s = strings.TrimPrefix(s, "streamed ")
+	if strings.Contains(s, "только что") {
+		return 0, true
+	}
+	if strings.Contains(s, "позавчера") {
+		return 2 * 24 * time.Hour, true
+	}
+	if strings.Contains(s, "вчера") {
+		return 24 * time.Hour, true
+	}
 	fields := strings.Fields(s)
 	for i := 0; i+1 < len(fields); i++ {
 		n, err := strconv.Atoi(strings.Trim(fields[i], ",."))
@@ -446,17 +459,31 @@ func youtubeRelativeDuration(s string) (time.Duration, bool) {
 		switch {
 		case strings.HasPrefix(unit, "second"):
 			d = time.Duration(n) * time.Second
+		case unit == "сек" || strings.HasPrefix(unit, "секунд"):
+			d = time.Duration(n) * time.Second
 		case strings.HasPrefix(unit, "minute"):
+			d = time.Duration(n) * time.Minute
+		case unit == "мин" || strings.HasPrefix(unit, "минут"):
 			d = time.Duration(n) * time.Minute
 		case strings.HasPrefix(unit, "hour"):
 			d = time.Duration(n) * time.Hour
+		case unit == "ч" || strings.HasPrefix(unit, "час"):
+			d = time.Duration(n) * time.Hour
 		case strings.HasPrefix(unit, "day"):
+			d = time.Duration(n) * 24 * time.Hour
+		case unit == "д" || unit == "день" || strings.HasPrefix(unit, "дн"):
 			d = time.Duration(n) * 24 * time.Hour
 		case strings.HasPrefix(unit, "week"):
 			d = time.Duration(n) * 7 * 24 * time.Hour
+		case strings.HasPrefix(unit, "нед"):
+			d = time.Duration(n) * 7 * 24 * time.Hour
 		case strings.HasPrefix(unit, "month"):
 			d = time.Duration(n) * 30 * 24 * time.Hour
+		case unit == "мес" || strings.HasPrefix(unit, "месяц"):
+			d = time.Duration(n) * 30 * 24 * time.Hour
 		case strings.HasPrefix(unit, "year"):
+			d = time.Duration(n) * 365 * 24 * time.Hour
+		case unit == "г" || strings.HasPrefix(unit, "год") || unit == "лет":
 			d = time.Duration(n) * 365 * 24 * time.Hour
 		default:
 			continue
